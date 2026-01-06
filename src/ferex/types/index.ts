@@ -16,6 +16,19 @@ export interface ServicePeriod {
   isActive: boolean; // Current employment
 }
 
+export interface NonFederalEmploymentPeriod {
+  id: string;
+  startDate: Date;
+  endDate?: Date; // Omit if current
+  employerName?: string;
+  annualSalary?: number;
+  had401k?: boolean;
+  annual401kContribution?: number;
+  hadHealthInsurance?: boolean;
+  isActive: boolean; // Currently employed here
+  notes?: string;
+}
+
 export interface SpouseInfo {
   name?: string;
   age: number;
@@ -57,7 +70,8 @@ export interface PersonalInfo {
 }
 
 export interface EmploymentInfo {
-  servicePeriods: ServicePeriod[];
+  servicePeriods: ServicePeriod[]; // Federal service periods
+  nonFederalPeriods?: NonFederalEmploymentPeriod[]; // Private sector employment
   currentOrLastSalary: number;
   high3Override?: number; // If user wants to specify
   lastHighThreeYears?: HighThreeYears;

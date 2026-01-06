@@ -13,6 +13,7 @@ import type {
   MilestoneType,
   MilestoneCriteria,
   ServicePeriod,
+  NonFederalEmploymentPeriod,
   OtherAccount,
   OtherAccountType,
 } from '../../types';
@@ -53,6 +54,9 @@ export function UnifiedControlPanel({
   );
   const [servicePeriods, setServicePeriods] = useState<ServicePeriod[]>(
     profile.employment.servicePeriods || []
+  );
+  const [nonFederalPeriods, setNonFederalPeriods] = useState<NonFederalEmploymentPeriod[]>(
+    profile.employment.nonFederalPeriods || []
   );
   const [sickLeaveHours, setSickLeaveHours] = useState<number>(
     profile.employment.sickLeaveHours || 0
@@ -125,6 +129,25 @@ export function UnifiedControlPanel({
 
   const removeServicePeriod = (id: string) => {
     setServicePeriods(servicePeriods.filter((p) => p.id !== id));
+  };
+
+  const addNonFederalPeriod = () => {
+    setNonFederalPeriods([
+      ...nonFederalPeriods,
+      {
+        id: `nonfed-${Date.now()}`,
+        startDate: new Date(),
+        isActive: false,
+      },
+    ]);
+  };
+
+  const updateNonFederalPeriod = (id: string, updates: Partial<NonFederalEmploymentPeriod>) => {
+    setNonFederalPeriods(nonFederalPeriods.map((p) => (p.id === id ? { ...p, ...updates } : p)));
+  };
+
+  const removeNonFederalPeriod = (id: string) => {
+    setNonFederalPeriods(nonFederalPeriods.filter((p) => p.id !== id));
   };
 
   const addOtherAccount = () => {
@@ -239,6 +262,7 @@ export function UnifiedControlPanel({
       employment: {
         ...profile.employment,
         servicePeriods,
+        nonFederalPeriods,
         sickLeaveHours,
         currentOrLastSalary: federalSalary,
       },
@@ -544,7 +568,107 @@ export function UnifiedControlPanel({
                   className="w-full text-xs"
                   size="sm"
                 >
-                  + Add Service Period
+                  + Add Federal Service Period
+                </Button>
+              </div>
+
+              <div className="pt-4 border-t">
+                <h4 className="font-medium mb-2">Non-Federal Employment</h4>
+                <p className="text-xs text-gray-500 mb-2">
+                  Track private sector jobs between federal service periods
+                </p>
+                <div className="space-y-2 mb-2">
+                  {nonFederalPeriods.map((period, index) => (
+                    <Card key={period.id} className="p-2 bg-blue-50 text-xs">
+                      <div className="flex justify-between items-start mb-2">
+                        <input
+                          type="text"
+                          placeholder="Employer name"
+                          value={period.employerName || ''}
+                          onChange={(e) =>
+                            updateNonFederalPeriod(period.id, {
+                              employerName: e.target.value,
+                            })
+                          }
+                          className="font-medium bg-transparent border-b border-transparent hover:border-gray-300 text-xs flex-1 mr-2"
+                        />
+                        <button
+                          onClick={() => removeNonFederalPeriod(period.id)}
+                          className="text-red-600 hover:text-red-800 text-xs"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1 mb-1">
+                        <input
+                          type="date"
+                          value={period.startDate.toISOString().split('T')[0]}
+                          onChange={(e) =>
+                            updateNonFederalPeriod(period.id, {
+                              startDate: new Date(e.target.value),
+                            })
+                          }
+                          className="px-2 py-1 border rounded"
+                        />
+                        <input
+                          type="date"
+                          value={period.endDate?.toISOString().split('T')[0] || ''}
+                          onChange={(e) =>
+                            updateNonFederalPeriod(period.id, {
+                              endDate: e.target.value ? new Date(e.target.value) : undefined,
+                            })
+                          }
+                          disabled={period.isActive}
+                          className="px-2 py-1 border rounded disabled:bg-gray-200"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-1 mb-1">
+                        <input
+                          type="number"
+                          placeholder="Salary"
+                          value={period.annualSalary || ''}
+                          onChange={(e) =>
+                            updateNonFederalPeriod(period.id, {
+                              annualSalary: parseInt(e.target.value) || 0,
+                            })
+                          }
+                          className="px-2 py-1 border rounded text-xs"
+                        />
+                        <input
+                          type="number"
+                          placeholder="401k contrib"
+                          value={period.annual401kContribution || ''}
+                          onChange={(e) =>
+                            updateNonFederalPeriod(period.id, {
+                              annual401kContribution: parseInt(e.target.value) || 0,
+                            })
+                          }
+                          className="px-2 py-1 border rounded text-xs"
+                        />
+                      </div>
+                      <label className="flex items-center gap-1 mt-1">
+                        <input
+                          type="checkbox"
+                          checked={period.isActive}
+                          onChange={(e) =>
+                            updateNonFederalPeriod(period.id, {
+                              isActive: e.target.checked,
+                            })
+                          }
+                          className="w-3 h-3"
+                        />
+                        <span className="text-xs">Currently employed here</span>
+                      </label>
+                    </Card>
+                  ))}
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={addNonFederalPeriod}
+                  className="w-full text-xs"
+                  size="sm"
+                >
+                  + Add Non-Federal Job
                 </Button>
               </div>
 
