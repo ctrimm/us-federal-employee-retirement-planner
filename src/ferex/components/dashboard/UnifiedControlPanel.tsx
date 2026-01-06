@@ -62,6 +62,15 @@ export function UnifiedControlPanel({
   );
 
   // Income Tab
+  const [federalSalary, setFederalSalary] = useState(
+    profile.employment.currentOrLastSalary || 100000
+  );
+  const [tspContribution, setTspContribution] = useState(
+    profile.tsp.annualContribution || 5000
+  );
+  const [tspEmployerMatch, setTspEmployerMatch] = useState(
+    profile.tsp.employerMatch || 5
+  );
   const [spouseIncome, setSpouseIncome] = useState(
     profile.personal.spouseInfo?.currentIncome || 0
   );
@@ -231,6 +240,7 @@ export function UnifiedControlPanel({
         ...profile.employment,
         servicePeriods,
         sickLeaveHours,
+        currentOrLastSalary: federalSalary,
       },
       retirement: {
         ...profile.retirement,
@@ -244,6 +254,8 @@ export function UnifiedControlPanel({
       tsp: {
         ...profile.tsp,
         returnAssumption: tspReturn,
+        annualContribution: tspContribution,
+        employerMatch: tspEmployerMatch,
       },
       assumptions: {
         ...profile.assumptions,
@@ -610,6 +622,61 @@ export function UnifiedControlPanel({
           {activeTab === 'income' && (
             <div className="space-y-4">
               <h3 className="font-semibold text-lg">Income Sources</h3>
+
+              {/* Federal Employment Income */}
+              <div className="pb-4 border-b">
+                <h4 className="font-medium mb-3">Your Federal Employment</h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Current Annual Salary: {formatCurrency(federalSalary, 0)}
+                    </label>
+                    <input
+                      type="range"
+                      min="30000"
+                      max="250000"
+                      step="5000"
+                      value={federalSalary}
+                      onChange={(e) => setFederalSalary(parseInt(e.target.value) || 100000)}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      TSP Annual Contribution: {formatCurrency(tspContribution, 0)}
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="30000"
+                      step="500"
+                      value={tspContribution}
+                      onChange={(e) => setTspContribution(parseInt(e.target.value) || 0)}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                    <div className="text-xs text-gray-500 mt-1">
+                      {((tspContribution / federalSalary) * 100).toFixed(1)}% of salary
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Employer Match: {tspEmployerMatch}%
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="10"
+                      step="0.5"
+                      value={tspEmployerMatch}
+                      onChange={(e) => setTspEmployerMatch(parseFloat(e.target.value) || 5)}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                    <div className="text-xs text-gray-500 mt-1">
+                      Employer contributes: {formatCurrency((federalSalary * tspEmployerMatch) / 100, 0)}/year
+                    </div>
+                  </div>
+                </div>
+              </div>
 
               {profile.personal.spouseInfo && (
                 <div className="pb-4 border-b">
