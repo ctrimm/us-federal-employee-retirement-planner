@@ -134,6 +134,24 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     tspBalance *= (1 + profile.tsp.returnAssumption / 100);
   }
 
+  // Initialize other investments tracking
+  let otherInvestmentsBalance = profile.otherInvestments?.totalBalance || 0;
+
+  // Initialize debts (deep copy to avoid mutating original)
+  const debts = (profile.planning?.debts || []).map(d => ({ ...d }));
+
+  // Initialize assets (deep copy)
+  const assets = (profile.planning?.assets || []).map(a => ({ ...a }));
+
+  // Spouse info
+  const spouseAge = profile.personal.spouseInfo ? currentAge + (profile.personal.spouseInfo.age - currentAge) : 0;
+  const spouseRetirementAge = profile.personal.spouseInfo?.retirementAge || 65;
+  const spouseCurrentIncome = profile.personal.spouseInfo?.currentIncome || 0;
+  const spouseRetirementIncome = profile.personal.spouseInfo?.retirementIncome || 0;
+
+  // Annual living expenses
+  const annualLivingExpenses = profile.assumptions.annualLivingExpenses || 60000;
+
   // Determine TSP drawdown rate
   const drawdownRate = profile.assumptions.tspDrawdownRate || 4;
 
@@ -172,6 +190,17 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       profile.assumptions.healthcareInflation
     );
 
+    // Calculate spouse income
+    let spouseIncome = 0;
+    if (profile.personal.spouseInfo) {
+      const currentSpouseAge = spouseAge + (age - retirementAge);
+      if (currentSpouseAge < spouseRetirementAge) {
+        spouseIncome = spouseCurrentIncome;
+      } else {
+        spouseIncome = spouseRetirementIncome;
+      }
+    }
+
     // Other income - Barista FIRE part-time work
     let otherIncome = 0;
     if (profile.retirement.enableBaristaFire &&
@@ -186,13 +215,75 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       }
     }
 
-    // Total income
-    const totalIncome = pension + tspDistribution + socialSecurity + otherIncome;
+    // Calculate other investments growth
+    const otherAccountsGrowth = (profile.otherInvestments?.accounts || []).reduce((total, account) => {
+      return total + (otherInvestmentsBalance * (account.returnAssumption || 6.5) / 100);
+    }, 0) / Math.max(1, (profile.otherInvestments?.accounts || []).length);
 
-    // Net income (after healthcare, before taxes)
+    otherInvestmentsBalance = otherInvestmentsBalance * (1 + (otherAccountsGrowth / otherInvestmentsBalance || 0));
+
+    // Calculate total expenses
+    let totalExpenses = annualLivingExpenses + fehbCost;
+
+    // Add college costs for children
+    (profile.planning?.children || []).forEach(child => {
+      const childAge = year - child.birthYear;
+      const collegeStart = child.collegeStartAge || 18;
+      const collegeEnd = collegeStart + (child.collegeYears || 4);
+
+      if (childAge >= collegeStart && childAge < collegeEnd) {
+        totalExpenses += child.annualCollegeCost || 0;
+      }
+    });
+
+    // Add life events costs
+    (profile.planning?.lifeEvents || []).forEach(event => {
+      if (event.year === year) {
+        if (!event.recurring) {
+          totalExpenses += event.amount || 0;
+        }
+      }
+      // Handle recurring events
+      if (event.recurring && event.duration) {
+        if (year >= event.year && year < event.year + event.duration) {
+          totalExpenses += event.amount || 0;
+        }
+      }
+    });
+
+    // Calculate debt payments and update balances
+    let totalDebtPayments = 0;
+    debts.forEach(debt => {
+      if (debt.currentBalance > 0) {
+        const interestCharge = debt.currentBalance * (debt.interestRate / 100);
+        const payment = debt.minimumPayment + (debt.extraPayment || 0);
+        totalDebtPayments += payment;
+        debt.currentBalance = Math.max(0, debt.currentBalance + interestCharge - payment);
+      }
+    });
+    totalExpenses += totalDebtPayments;
+
+    // Update asset values with appreciation
+    let totalAssetValue = 0;
+    assets.forEach(asset => {
+      asset.currentValue *= (1 + (asset.appreciationRate || 0) / 100);
+      totalAssetValue += asset.currentValue;
+    });
+
+    // Calculate total debt
+    const totalDebt = debts.reduce((sum, d) => sum + d.currentBalance, 0);
+
+    // Total income
+    const totalIncome = pension + tspDistribution + socialSecurity + spouseIncome + otherIncome;
+
+    // Net income (after expenses and taxes)
     // Rough tax estimate: 15% effective rate
     const estimatedTaxes = totalIncome * 0.15;
-    const netIncome = totalIncome - fehbCost - estimatedTaxes;
+    const netIncome = totalIncome - totalExpenses - estimatedTaxes;
+
+    // Calculate net worth
+    const netWorth = tspBalance + otherInvestmentsBalance + totalAssetValue - totalDebt;
+    const liquidNetWorth = tspBalance + otherInvestmentsBalance - totalDebt;
 
     // Cumulative savings
     cumulativeSavings += netIncome;
@@ -204,10 +295,17 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       tspDistribution,
       socialSecurity,
       otherIncome,
+      spouseIncome,
       fehbCost,
       totalIncome,
+      expenses: totalExpenses,
       netIncome,
       tspBalance: Math.max(0, tspBalance),
+      otherInvestmentsBalance: Math.max(0, otherInvestmentsBalance),
+      totalDebt,
+      totalAssets: totalAssetValue,
+      netWorth,
+      liquidNetWorth,
       cumulativeSavings,
     });
   }

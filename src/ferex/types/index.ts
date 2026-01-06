@@ -20,6 +20,10 @@ export interface SpouseInfo {
   name?: string;
   age: number;
   gender: Gender;
+  // Additional planning fields
+  currentIncome?: number; // Annual income
+  retirementAge?: number; // When spouse plans to retire
+  retirementIncome?: number; // Expected retirement income (pension, SS, etc.)
 }
 
 export interface HighThreeYears {
@@ -111,6 +115,92 @@ export interface AssumptionsInfo {
   healthcareInflation: number; // Default 5.0%
   fehbCoverageLevel: FEHBCoverageLevel;
   tspDrawdownRate?: number; // Default 4%
+  annualLivingExpenses?: number; // Expected annual expenses in retirement
+}
+
+// Life Events & Milestones
+export type LifeEventType =
+  | 'child_birth'
+  | 'child_college'
+  | 'home_purchase'
+  | 'car_purchase'
+  | 'major_expense'
+  | 'income_change'
+  | 'other';
+
+export type MilestoneType =
+  | 'retirement'
+  | 'spouse_retirement'
+  | 'financial_independence'
+  | 'debt_free'
+  | 'net_worth_target'
+  | 'age_target'
+  | 'custom';
+
+export type MilestoneCriteria =
+  | 'reach_age'
+  | 'reach_milestone'
+  | 'net_worth_above'
+  | 'liquid_net_worth_above'
+  | 'total_debt_below';
+
+export interface Child {
+  id: string;
+  name: string;
+  birthYear: number;
+  collegeStartAge?: number; // Default 18
+  collegeYears?: number; // Default 4
+  annualCollegeCost?: number; // Per year cost
+  notes?: string;
+}
+
+export interface LifeEvent {
+  id: string;
+  name: string;
+  type: LifeEventType;
+  year: number; // Year event occurs
+  amount?: number; // One-time cost/income
+  recurring?: boolean; // If true, repeats annually
+  duration?: number; // Years if recurring
+  notes?: string;
+}
+
+export interface Milestone {
+  id: string;
+  name: string;
+  type: MilestoneType;
+  criteria: MilestoneCriteria;
+  targetValue?: number; // For net worth, age, etc.
+  linkedMilestone?: string; // ID of another milestone (for dependent goals)
+  notes?: string;
+}
+
+export interface Debt {
+  id: string;
+  name: string;
+  type: 'mortgage' | 'student_loan' | 'car_loan' | 'credit_card' | 'other';
+  currentBalance: number;
+  interestRate: number;
+  minimumPayment: number;
+  extraPayment?: number;
+  notes?: string;
+}
+
+export interface Asset {
+  id: string;
+  name: string;
+  type: 'home' | 'car' | 'other';
+  currentValue: number;
+  appreciationRate?: number; // Annual appreciation %
+  notes?: string;
+}
+
+export interface PlanningInfo {
+  children?: Child[];
+  lifeEvents?: LifeEvent[];
+  milestones?: Milestone[];
+  debts?: Debt[];
+  assets?: Asset[];
 }
 
 export interface UserProfile {
@@ -120,6 +210,7 @@ export interface UserProfile {
   tsp: TSPInfo;
   otherInvestments?: OtherInvestmentsInfo;
   assumptions: AssumptionsInfo;
+  planning?: PlanningInfo; // Life events, children, milestones, debts, assets
 }
 
 export interface ProjectionYear {
@@ -128,11 +219,18 @@ export interface ProjectionYear {
   pension: number; // Annual
   tspDistribution: number;
   socialSecurity: number; // If applicable
-  otherIncome: number; // Part-time work, etc.
+  otherIncome: number; // Part-time work, spouse income, etc.
+  spouseIncome: number; // Separate tracking for spouse income
   fehbCost: number;
   totalIncome: number;
-  netIncome: number; // After FEHB, estimated taxes
+  expenses: number; // Total annual expenses
+  netIncome: number; // After FEHB, expenses, estimated taxes
   tspBalance: number; // Remaining
+  otherInvestmentsBalance: number; // Combined other accounts
+  totalDebt: number; // Remaining debt balance
+  totalAssets: number; // Asset values
+  netWorth: number; // Assets + investments - debts
+  liquidNetWorth: number; // TSP + other investments - debts
   cumulativeSavings: number;
 }
 

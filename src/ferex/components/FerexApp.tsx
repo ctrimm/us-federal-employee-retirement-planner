@@ -11,6 +11,7 @@ import { ExpressOnboarding } from './onboarding/ExpressOnboarding';
 import { ComprehensiveOnboarding } from './onboarding/ComprehensiveOnboarding';
 import { Dashboard } from './dashboard/Dashboard';
 import { ControlPanel } from './dashboard/ControlPanel';
+import { LifeEventsPanel } from './dashboard/LifeEventsPanel';
 import { ScenarioComparison } from './dashboard/ScenarioComparison';
 import { sampleScenarios } from '../data/sampleScenarios';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ export function FerexApp() {
   const [view, setView] = useState<AppView>('landing');
   const [onboardingMode, setOnboardingMode] = useState<OnboardingMode>('express');
   const [isControlPanelOpen, setIsControlPanelOpen] = useState(false);
+  const [isLifeEventsPanelOpen, setIsLifeEventsPanelOpen] = useState(false);
 
   const [savedScenario, setSavedScenario] = useLocalStorage<Scenario | null>(
     'ferex-current-scenario',
@@ -66,11 +68,18 @@ export function FerexApp() {
   const handleUpdateProfile = (updates: Partial<UserProfile>) => {
     updateProfile(updates);
     if (scenario) {
+      // Deep merge the updates properly (matching the logic in useScenario hook)
       const updatedScenario = {
         ...scenario,
         profile: {
           ...scenario.profile,
-          ...updates,
+          personal: updates.personal ? { ...scenario.profile.personal, ...updates.personal } : scenario.profile.personal,
+          employment: updates.employment ? { ...scenario.profile.employment, ...updates.employment } : scenario.profile.employment,
+          retirement: updates.retirement ? { ...scenario.profile.retirement, ...updates.retirement } : scenario.profile.retirement,
+          tsp: updates.tsp ? { ...scenario.profile.tsp, ...updates.tsp } : scenario.profile.tsp,
+          otherInvestments: updates.otherInvestments ? { ...scenario.profile.otherInvestments, ...updates.otherInvestments } : scenario.profile.otherInvestments,
+          assumptions: updates.assumptions ? { ...scenario.profile.assumptions, ...updates.assumptions } : scenario.profile.assumptions,
+          planning: updates.planning ? { ...scenario.profile.planning, ...updates.planning } : scenario.profile.planning,
         },
         lastModified: new Date(),
       };
@@ -284,6 +293,14 @@ export function FerexApp() {
           onUpdate={handleUpdateProfile}
           isOpen={isControlPanelOpen}
           onToggle={() => setIsControlPanelOpen(!isControlPanelOpen)}
+        />
+
+        {/* Life Events Panel */}
+        <LifeEventsPanel
+          profile={scenario.profile}
+          onUpdate={handleUpdateProfile}
+          isOpen={isLifeEventsPanelOpen}
+          onToggle={() => setIsLifeEventsPanelOpen(!isLifeEventsPanelOpen)}
         />
 
         {isCalculating ? (

@@ -63,6 +63,7 @@ export function useScenario(initialScenario?: Scenario) {
         tsp: updates.tsp ? { ...scenario.profile.tsp, ...updates.tsp } : scenario.profile.tsp,
         otherInvestments: updates.otherInvestments ? { ...scenario.profile.otherInvestments, ...updates.otherInvestments } : scenario.profile.otherInvestments,
         assumptions: updates.assumptions ? { ...scenario.profile.assumptions, ...updates.assumptions } : scenario.profile.assumptions,
+        planning: updates.planning ? { ...scenario.profile.planning, ...updates.planning } : scenario.profile.planning,
       },
       lastModified: new Date(),
     });
