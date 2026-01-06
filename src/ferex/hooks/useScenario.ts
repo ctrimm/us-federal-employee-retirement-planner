@@ -10,11 +10,49 @@ import { generateProjections, determineEligibility, getPensionBreakdown } from '
 /**
  * Deep clone a UserProfile to ensure all nested objects get new references
  * This is critical for React's dependency tracking to work correctly
+ * Uses structuredClone to preserve Date objects
  */
 function deepCloneUserProfile(profile: UserProfile): UserProfile {
-  // Use JSON.parse/stringify for deep cloning
-  // This guarantees ALL nested objects get new references
-  return JSON.parse(JSON.stringify(profile));
+  // Use structuredClone if available (modern browsers)
+  // This preserves Date objects and other special types
+  if (typeof structuredClone !== 'undefined') {
+    return structuredClone(profile);
+  }
+
+  // Fallback: JSON clone with manual Date reconstruction
+  const cloned = JSON.parse(JSON.stringify(profile));
+
+  // Reconstruct Date objects
+  if (cloned.personal?.birthDate) {
+    cloned.personal.birthDate = new Date(cloned.personal.birthDate);
+  }
+  if (cloned.personal?.spouseInfo?.birthDate) {
+    cloned.personal.spouseInfo.birthDate = new Date(cloned.personal.spouseInfo.birthDate);
+  }
+  if (cloned.employment?.startDate) {
+    cloned.employment.startDate = new Date(cloned.employment.startDate);
+  }
+  if (cloned.employment?.servicePeriods) {
+    cloned.employment.servicePeriods = cloned.employment.servicePeriods.map((period: any) => ({
+      ...period,
+      startDate: new Date(period.startDate),
+      endDate: new Date(period.endDate),
+    }));
+  }
+  if (cloned.planning?.children) {
+    cloned.planning.children = cloned.planning.children.map((child: any) => ({
+      ...child,
+      // birthYear is a number, not a date, so no conversion needed
+    }));
+  }
+  if (cloned.planning?.lifeEvents) {
+    cloned.planning.lifeEvents = cloned.planning.lifeEvents.map((event: any) => ({
+      ...event,
+      date: event.date ? new Date(event.date) : undefined,
+    }));
+  }
+
+  return cloned;
 }
 
 /**
@@ -91,7 +129,17 @@ function deepMergeProfile(base: UserProfile, updates: Partial<UserProfile>): Use
 }
 
 export function useScenario(initialScenario?: Scenario) {
-  const [scenario, setScenario] = useState<Scenario | null>(initialScenario || null);
+  // Ensure initial scenario has proper Date objects (in case it came from localStorage)
+  const normalizedInitialScenario = initialScenario
+    ? {
+        ...initialScenario,
+        createdAt: initialScenario.createdAt instanceof Date ? initialScenario.createdAt : new Date(initialScenario.createdAt),
+        lastModified: initialScenario.lastModified instanceof Date ? initialScenario.lastModified : new Date(initialScenario.lastModified),
+        profile: deepCloneUserProfile(initialScenario.profile),
+      }
+    : null;
+
+  const [scenario, setScenario] = useState<Scenario | null>(normalizedInitialScenario);
   const [isCalculating, setIsCalculating] = useState(false);
 
   // State for calculated values (instead of useMemo)
@@ -214,8 +262,11 @@ export function useScenario(initialScenario?: Scenario) {
     });
 
     // Deep clone the profile to ensure clean state
+    // Also ensure Date fields are Date objects (in case they were serialized from localStorage)
     const clonedScenario: Scenario = {
       ...newScenario,
+      createdAt: newScenario.createdAt instanceof Date ? newScenario.createdAt : new Date(newScenario.createdAt),
+      lastModified: newScenario.lastModified instanceof Date ? newScenario.lastModified : new Date(newScenario.lastModified),
       profile: deepCloneUserProfile(newScenario.profile),
     };
 
