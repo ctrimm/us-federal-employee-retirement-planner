@@ -106,33 +106,23 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
   const currentYear = new Date().getFullYear();
   const currentAge = currentYear - profile.personal.birthYear;
 
-  // Determine retirement age
-  const retirementAge =
-    profile.retirement.intendedRetirementAge ||
-    determineEligibility(profile).earliestRetirementAge;
+  // Determine when leaving service vs claiming pension
+  const leaveServiceAge = profile.retirement.leaveServiceAge || profile.retirement.intendedRetirementAge || determineEligibility(profile).earliestRetirementAge;
+  const claimPensionAge = profile.retirement.intendedRetirementAge || leaveServiceAge;
 
   // Determine end age
-  const lifeExpectancy =
-    profile.personal.lifeExpectancy ||
-    DEFAULT_LIFE_EXPECTANCY;
+  const lifeExpectancy = profile.personal.lifeExpectancy || DEFAULT_LIFE_EXPECTANCY;
+  const endAge = profile.retirement.projectionEndAge || lifeExpectancy;
 
-  const endAge =
-    profile.retirement.projectionEndAge ||
-    lifeExpectancy;
+  // Start from current age to show full picture
+  const startAge = currentAge;
 
-  // Calculate base pension
+  // Calculate base pension (will only apply from claimPensionAge)
   const pensionInfo = calculateAnnualPension(profile);
   const basePension = pensionInfo.annualPension;
 
-  // Calculate TSP at retirement
-  const yearsUntilRetirement = Math.max(0, retirementAge - currentAge);
+  // Initialize TSP balance
   let tspBalance = profile.tsp.currentBalance;
-
-  // Project TSP growth until retirement
-  for (let i = 0; i < yearsUntilRetirement; i++) {
-    tspBalance += profile.tsp.annualContribution;
-    tspBalance *= (1 + profile.tsp.returnAssumption / 100);
-  }
 
   // Initialize other investments tracking
   let otherInvestmentsBalance = profile.otherInvestments?.totalBalance || 0;
@@ -158,42 +148,52 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
   // Generate year-by-year projections
   let cumulativeSavings = 0;
 
-  for (let age = retirementAge; age <= endAge; age++) {
+  for (let age = startAge; age <= endAge; age++) {
     const year = profile.personal.birthYear + age;
-    const yearsFromRetirement = age - retirementAge;
+    const stillWorking = age < leaveServiceAge;
+    const hasPension = age >= claimPensionAge;
+    const yearsFromPension = age - claimPensionAge;
 
-    // Calculate pension with COLA
-    const pension = calculatePensionWithCOLA(
+    // TSP contributions while still working
+    if (stillWorking && age < leaveServiceAge) {
+      tspBalance += profile.tsp.annualContribution;
+      tspBalance *= (1 + profile.tsp.returnAssumption / 100);
+    }
+
+    // Calculate pension with COLA (only if claiming)
+    const pension = hasPension ? calculatePensionWithCOLA(
       basePension,
-      yearsFromRetirement,
+      Math.max(0, yearsFromPension),
       profile.assumptions.colaRate
-    );
+    ) : 0;
 
-    // Calculate TSP distribution
-    const tspDistribution = calculateTSPDistribution(tspBalance, drawdownRate);
+    // Calculate TSP distribution (only after leaving service)
+    const tspDistribution = stillWorking ? 0 : calculateTSPDistribution(tspBalance, drawdownRate);
 
-    // Calculate TSP balance for next year
-    tspBalance = calculateTSPBalanceAfterYear(
-      tspBalance,
-      tspDistribution,
-      profile.tsp.returnAssumption
-    );
+    // Calculate TSP balance for next year (growth happens regardless)
+    if (!stillWorking) {
+      tspBalance = calculateTSPBalanceAfterYear(
+        tspBalance,
+        tspDistribution,
+        profile.tsp.returnAssumption
+      );
+    }
 
     // Estimate Social Security
     const socialSecurity = estimateSocialSecurity(pensionInfo.high3, age);
 
-    // Calculate FEHB cost
-    const fehbCost = calculateAnnualFEHBCost(
+    // Calculate FEHB cost (only after leaving service)
+    const fehbCost = stillWorking ? 0 : calculateAnnualFEHBCost(
       profile.assumptions.fehbCoverageLevel,
       age,
-      yearsFromRetirement,
+      Math.max(0, age - leaveServiceAge),
       profile.assumptions.healthcareInflation
     );
 
     // Calculate spouse income
     let spouseIncome = 0;
     if (profile.personal.spouseInfo) {
-      const currentSpouseAge = spouseAge + (age - retirementAge);
+      const currentSpouseAge = spouseAge + (age - currentAge);
       if (currentSpouseAge < spouseRetirementAge) {
         spouseIncome = spouseCurrentIncome;
       } else {
@@ -222,8 +222,8 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
 
     otherInvestmentsBalance = otherInvestmentsBalance * (1 + (otherAccountsGrowth / otherInvestmentsBalance || 0));
 
-    // Calculate total expenses
-    let totalExpenses = annualLivingExpenses + fehbCost;
+    // Calculate total expenses (living expenses only apply after leaving service)
+    let totalExpenses = stillWorking ? 0 : (annualLivingExpenses + fehbCost);
 
     // Add college costs for children
     (profile.planning?.children || []).forEach(child => {

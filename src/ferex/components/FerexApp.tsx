@@ -10,8 +10,7 @@ import { useLocalStorage } from '../hooks/useLocalStorage';
 import { ExpressOnboarding } from './onboarding/ExpressOnboarding';
 import { ComprehensiveOnboarding } from './onboarding/ComprehensiveOnboarding';
 import { Dashboard } from './dashboard/Dashboard';
-import { ControlPanel } from './dashboard/ControlPanel';
-import { LifeEventsPanel } from './dashboard/LifeEventsPanel';
+import { UnifiedControlPanel } from './dashboard/UnifiedControlPanel';
 import { ScenarioComparison } from './dashboard/ScenarioComparison';
 import { sampleScenarios } from '../data/sampleScenarios';
 import { Button } from '@/components/ui/button';
@@ -25,7 +24,6 @@ export function FerexApp() {
   const [view, setView] = useState<AppView>('landing');
   const [onboardingMode, setOnboardingMode] = useState<OnboardingMode>('express');
   const [isControlPanelOpen, setIsControlPanelOpen] = useState(false);
-  const [isLifeEventsPanelOpen, setIsLifeEventsPanelOpen] = useState(false);
 
   const [savedScenario, setSavedScenario] = useLocalStorage<Scenario | null>(
     'ferex-current-scenario',
@@ -290,20 +288,12 @@ export function FerexApp() {
           </div>
         </div>
 
-        {/* Control Panel */}
-        <ControlPanel
+        {/* Unified Control Panel */}
+        <UnifiedControlPanel
           profile={scenario.profile}
           onUpdate={handleUpdateProfile}
           isOpen={isControlPanelOpen}
           onToggle={() => setIsControlPanelOpen(!isControlPanelOpen)}
-        />
-
-        {/* Life Events Panel */}
-        <LifeEventsPanel
-          profile={scenario.profile}
-          onUpdate={handleUpdateProfile}
-          isOpen={isLifeEventsPanelOpen}
-          onToggle={() => setIsLifeEventsPanelOpen(!isLifeEventsPanelOpen)}
         />
 
         {isCalculating ? (

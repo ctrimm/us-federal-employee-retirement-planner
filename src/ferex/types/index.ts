@@ -66,7 +66,8 @@ export interface EmploymentInfo {
 
 export interface RetirementInfo {
   survivorAnnuityType: SurvivorAnnuityType;
-  intendedRetirementAge?: number;
+  leaveServiceAge?: number; // Age when leaving federal service
+  intendedRetirementAge?: number; // Age when claiming pension (can be after leaving service)
   projectionEndAge?: number;
   // Barista FIRE settings
   enableBaristaFire?: boolean;
