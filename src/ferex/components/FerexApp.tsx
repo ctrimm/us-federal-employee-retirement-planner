@@ -16,6 +16,7 @@ import { ScenarioComparison } from './dashboard/ScenarioComparison';
 import { sampleScenarios } from '../data/sampleScenarios';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 type AppView = 'landing' | 'onboarding' | 'dashboard' | 'comparison';
 type OnboardingMode = 'express' | 'comprehensive';
@@ -227,19 +228,21 @@ export function FerexApp() {
   // Onboarding View
   if (view === 'onboarding') {
     return (
-      <div className="min-h-screen bg-gray-50 py-8">
-        {onboardingMode === 'express' ? (
-          <ExpressOnboarding
-            onComplete={handleOnboardingComplete}
-            onCancel={() => setView('landing')}
-          />
-        ) : (
-          <ComprehensiveOnboarding
-            onComplete={handleOnboardingComplete}
-            onCancel={() => setView('landing')}
-          />
-        )}
-      </div>
+      <ErrorBoundary>
+        <div className="min-h-screen bg-gray-50 py-8">
+          {onboardingMode === 'express' ? (
+            <ExpressOnboarding
+              onComplete={handleOnboardingComplete}
+              onCancel={() => setView('landing')}
+            />
+          ) : (
+            <ComprehensiveOnboarding
+              onComplete={handleOnboardingComplete}
+              onCancel={() => setView('landing')}
+            />
+          )}
+        </div>
+      </ErrorBoundary>
     );
   }
 

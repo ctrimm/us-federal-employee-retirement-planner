@@ -35,6 +35,21 @@ export function ExpressOnboarding({ onComplete, onCancel }: ExpressOnboardingPro
   const [currentSalary, setCurrentSalary] = useState<number>(85000);
   const [tspBalance, setTSPBalance] = useState<number>(150000);
 
+  // Helper function to safely parse dates
+  const handleDateChange = (value: string, callback: (date: Date) => void) => {
+    if (!value) return; // Empty value, do nothing
+    try {
+      const date = new Date(value);
+      // Check if date is valid
+      if (!isNaN(date.getTime())) {
+        callback(date);
+      }
+    } catch (error) {
+      // Invalid date, do nothing
+      console.warn('Invalid date input:', value);
+    }
+  };
+
   const handleComplete = () => {
     const profile: UserProfile = {
       personal: {
@@ -133,9 +148,11 @@ export function ExpressOnboarding({ onComplete, onCancel }: ExpressOnboardingPro
                   type="date"
                   value={servicePeriods[0].startDate.toISOString().split('T')[0]}
                   onChange={(e) => {
-                    const newPeriods = [...servicePeriods];
-                    newPeriods[0].startDate = new Date(e.target.value);
-                    setServicePeriods(newPeriods);
+                    handleDateChange(e.target.value, (date) => {
+                      const newPeriods = [...servicePeriods];
+                      newPeriods[0].startDate = date;
+                      setServicePeriods(newPeriods);
+                    });
                   }}
                   className="w-full px-3 py-2 border rounded-md"
                 />
@@ -190,9 +207,11 @@ export function ExpressOnboarding({ onComplete, onCancel }: ExpressOnboardingPro
                     type="date"
                     value={servicePeriods[0].endDate?.toISOString().split('T')[0] || ''}
                     onChange={(e) => {
-                      const newPeriods = [...servicePeriods];
-                      newPeriods[0].endDate = new Date(e.target.value);
-                      setServicePeriods(newPeriods);
+                      handleDateChange(e.target.value, (date) => {
+                        const newPeriods = [...servicePeriods];
+                        newPeriods[0].endDate = date;
+                        setServicePeriods(newPeriods);
+                      });
                     }}
                     className="w-full px-3 py-2 border rounded-md"
                   />

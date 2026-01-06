@@ -91,6 +91,21 @@ export function ComprehensiveOnboarding({
   );
   const [tspDrawdownRate, setTspDrawdownRate] = useState<number>(4.0);
 
+  // Helper function to safely parse dates
+  const handleDateChange = (value: string, callback: (date: Date) => void) => {
+    if (!value) return; // Empty value, do nothing
+    try {
+      const date = new Date(value);
+      // Check if date is valid
+      if (!isNaN(date.getTime())) {
+        callback(date);
+      }
+    } catch (error) {
+      // Invalid date, do nothing
+      console.warn('Invalid date input:', value);
+    }
+  };
+
   const addServicePeriod = () => {
     const newPeriod: ServicePeriod = {
       id: `period-${Date.now()}`,
@@ -266,9 +281,11 @@ export function ComprehensiveOnboarding({
                         type="date"
                         value={period.startDate.toISOString().split('T')[0]}
                         onChange={(e) =>
-                          updateServicePeriod(period.id, {
-                            startDate: new Date(e.target.value),
-                          })
+                          handleDateChange(e.target.value, (date) =>
+                            updateServicePeriod(period.id, {
+                              startDate: date,
+                            })
+                          )
                         }
                         className="w-full px-3 py-2 border rounded-md text-sm"
                       />
@@ -283,14 +300,21 @@ export function ComprehensiveOnboarding({
                         value={
                           period.endDate?.toISOString().split('T')[0] || ''
                         }
-                        onChange={(e) =>
-                          updateServicePeriod(period.id, {
-                            endDate: e.target.value
-                              ? new Date(e.target.value)
-                              : undefined,
-                            isActive: !e.target.value,
-                          })
-                        }
+                        onChange={(e) => {
+                          if (!e.target.value) {
+                            updateServicePeriod(period.id, {
+                              endDate: undefined,
+                              isActive: true,
+                            });
+                          } else {
+                            handleDateChange(e.target.value, (date) =>
+                              updateServicePeriod(period.id, {
+                                endDate: date,
+                                isActive: false,
+                              })
+                            );
+                          }
+                        }}
                         disabled={period.isActive}
                         className="w-full px-3 py-2 border rounded-md text-sm disabled:bg-gray-200"
                       />
