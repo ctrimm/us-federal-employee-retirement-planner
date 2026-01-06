@@ -48,8 +48,7 @@ export interface TSPAllocation {
 
 export interface PersonalInfo {
   birthYear: number;
-  gender: Gender;
-  lifeExpectancy?: number; // Override default
+  lifeExpectancy?: number; // Default 85 if not specified
   spouseInfo?: SpouseInfo;
 }
 
@@ -58,6 +57,7 @@ export interface EmploymentInfo {
   currentOrLastSalary: number;
   high3Override?: number; // If user wants to specify
   lastHighThreeYears?: HighThreeYears;
+  sickLeaveHours?: number; // Unused sick leave hours (converts to service time)
 }
 
 export interface RetirementInfo {
@@ -188,10 +188,7 @@ export const DEFAULT_TSP: Partial<TSPInfo> = {
   annualContribution: 0,
 };
 
-export const LIFE_EXPECTANCY = {
-  male: 82,
-  female: 85,
-};
+export const DEFAULT_LIFE_EXPECTANCY = 85; // Average life expectancy
 
 // FERS and CSRS constants
 export const FERS_ACCRUAL_RATE = 0.01; // 1% per year

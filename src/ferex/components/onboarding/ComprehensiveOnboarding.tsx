@@ -7,7 +7,6 @@ import { useState } from 'react';
 import type {
   UserProfile,
   ServicePeriod,
-  Gender,
   SurvivorAnnuityType,
   FEHBCoverageLevel,
   SpouseInfo,
@@ -33,7 +32,6 @@ export function ComprehensiveOnboarding({
 
   // Step 1: Personal Info (expanded from express)
   const [birthYear, setBirthYear] = useState<number>(1980);
-  const [gender, setGender] = useState<Gender>('male');
 
   // Step 2: Service History (multiple periods)
   const [servicePeriods, setServicePeriods] = useState<ServicePeriod[]>([
@@ -120,7 +118,6 @@ export function ComprehensiveOnboarding({
     const profile: UserProfile = {
       personal: {
         birthYear,
-        gender,
         spouseInfo: hasSpouse ? spouseInfo : undefined,
       },
       employment: {
@@ -228,38 +225,6 @@ export function ComprehensiveOnboarding({
                 />
                 <p className="text-xs text-muted-foreground mt-1">
                   Current age: {new Date().getFullYear() - birthYear}
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">Gender</label>
-                <div className="flex gap-4">
-                  <button
-                    type="button"
-                    onClick={() => setGender('male')}
-                    className={`flex-1 px-4 py-3 border rounded-md ${
-                      gender === 'male'
-                        ? 'border-primary bg-primary/5 font-medium'
-                        : 'border-gray-300'
-                    }`}
-                  >
-                    Male
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setGender('female')}
-                    className={`flex-1 px-4 py-3 border rounded-md ${
-                      gender === 'female'
-                        ? 'border-primary bg-primary/5 font-medium'
-                        : 'border-gray-300'
-                    }`}
-                  >
-                    Female
-                  </button>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Used for life expectancy ({gender === 'male' ? '82' : '85'}{' '}
-                  years)
                 </p>
               </div>
             </div>

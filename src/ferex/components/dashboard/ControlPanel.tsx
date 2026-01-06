@@ -56,6 +56,9 @@ export function ControlPanel({ profile, onUpdate, isOpen, onToggle }: ControlPan
   const [servicePeriods, setServicePeriods] = useState<ServicePeriod[]>(
     profile.employment.servicePeriods || []
   );
+  const [sickLeaveHours, setSickLeaveHours] = useState<number>(
+    profile.employment.sickLeaveHours || 0
+  );
 
   // Other Investments
   const [otherAccounts, setOtherAccounts] = useState<OtherAccount[]>(
@@ -108,6 +111,7 @@ export function ControlPanel({ profile, onUpdate, isOpen, onToggle }: ControlPan
       employment: {
         ...profile.employment,
         servicePeriods,
+        sickLeaveHours,
       },
       retirement: {
         ...profile.retirement,
@@ -151,6 +155,7 @@ export function ControlPanel({ profile, onUpdate, isOpen, onToggle }: ControlPan
     setPartTimeEndAge(profile.retirement.partTimeEndAge || (retirementAge + 10));
     setTargetRetirementIncome(profile.retirement.targetRetirementIncome || 60000);
     setServicePeriods(profile.employment.servicePeriods || []);
+    setSickLeaveHours(profile.employment.sickLeaveHours || 0);
     setOtherAccounts(profile.otherInvestments?.accounts || []);
   };
 
@@ -280,6 +285,25 @@ export function ControlPanel({ profile, onUpdate, isOpen, onToggle }: ControlPan
                 >
                   + Add Service Period
                 </Button>
+
+                {/* Sick Leave Hours */}
+                <div className="mt-4">
+                  <label className="block text-sm font-medium mb-2">
+                    Sick Leave Hours (Unused)
+                  </label>
+                  <input
+                    type="number"
+                    value={sickLeaveHours}
+                    onChange={(e) => setSickLeaveHours(parseInt(e.target.value) || 0)}
+                    min={0}
+                    step={10}
+                    className="w-full px-3 py-2 border rounded-md"
+                    placeholder="0"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Unused sick leave converts to service credit (~2,087 hours = 1 year). This boosts your pension calculation once you're eligible to retire.
+                  </p>
+                </div>
               </div>
             </div>
 

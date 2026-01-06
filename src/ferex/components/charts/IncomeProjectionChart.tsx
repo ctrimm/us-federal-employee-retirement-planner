@@ -51,7 +51,7 @@ export function IncomeProjectionChart({ projections }: IncomeProjectionChartProp
   };
 
   return (
-    <ResponsiveContainer width="100%" height={400}>
+    <ResponsiveContainer width="100%" height={500}>
       <AreaChart
         data={chartData}
         margin={{ top: 10, right: 30, left: 0, bottom: 0 }}

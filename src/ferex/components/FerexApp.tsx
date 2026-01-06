@@ -236,23 +236,10 @@ export function FerexApp() {
 
   // Comparison View
   if (view === 'comparison') {
-    // Build comparison data with projections
-    const comparisonData = comparisonScenarios.map((s) => {
-      // Create temporary scenario hook instance to get projections
-      const { useScenario: useComparisonScenario } = require('../hooks/useScenario');
-      const { projections: scenarioProjections, pensionBreakdown: scenarioPensionBreakdown } = useComparisonScenario(s);
-
-      return {
-        scenario: s,
-        projections: scenarioProjections,
-        pensionBreakdown: scenarioPensionBreakdown!,
-      };
-    }).filter((data) => data.projections.length > 0);
-
     return (
       <div className="min-h-screen bg-gray-50">
         <ScenarioComparison
-          scenarios={comparisonData}
+          scenarios={comparisonScenarios}
           onClose={() => setView('dashboard')}
           onRemoveScenario={handleRemoveFromComparison}
         />

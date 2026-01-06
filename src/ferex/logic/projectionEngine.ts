@@ -9,7 +9,7 @@ import type {
   EligibilityInfo,
   PensionBreakdown,
 } from '../types';
-import { LIFE_EXPECTANCY } from '../types';
+import { DEFAULT_LIFE_EXPECTANCY } from '../types';
 import { calculateAnnualPension, calculatePensionWithCOLA } from './pensionCalculator';
 import { calculateTSPBalanceAfterYear, calculateTSPDistribution } from './tspCalculator';
 import { calculateAnnualFEHBCost } from './fehbCalculator';
@@ -28,11 +28,13 @@ import {
 export function determineEligibility(profile: UserProfile): EligibilityInfo {
   const currentYear = new Date().getFullYear();
   const currentAge = currentYear - profile.personal.birthYear;
-  const totalYears = calculateTotalService(profile.employment.servicePeriods);
+  const sickLeaveCredit = (profile.employment.sickLeaveHours || 0) / 2087;
+  const totalYears = calculateTotalService(profile.employment.servicePeriods) + sickLeaveCredit;
   const mra = calculateMRA(profile.personal.birthYear);
 
   const { fersYears, csrsYears } = calculateServiceBySystem(
-    profile.employment.servicePeriods
+    profile.employment.servicePeriods,
+    profile.employment.sickLeaveHours || 0
   );
 
   const canRetire = canRetireNow(currentAge, totalYears, profile.personal.birthYear);
@@ -112,7 +114,7 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
   // Determine end age
   const lifeExpectancy =
     profile.personal.lifeExpectancy ||
-    LIFE_EXPECTANCY[profile.personal.gender];
+    DEFAULT_LIFE_EXPECTANCY;
 
   const endAge =
     profile.retirement.projectionEndAge ||

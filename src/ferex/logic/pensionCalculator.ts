@@ -131,7 +131,8 @@ export function calculateMixedPension(
 export function calculateAnnualPension(profile: UserProfile): PensionBreakdown {
   const high3 = calculateHigh3(profile);
   const { fersYears, csrsYears, totalYears } = calculateServiceBySystem(
-    profile.employment.servicePeriods
+    profile.employment.servicePeriods,
+    profile.employment.sickLeaveHours || 0
   );
 
   let annualPension: number;

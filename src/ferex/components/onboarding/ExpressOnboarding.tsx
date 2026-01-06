@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react';
-import type { UserProfile, ServicePeriod, Gender } from '../../types';
+import type { UserProfile, ServicePeriod } from '../../types';
 import { DEFAULT_ASSUMPTIONS, DEFAULT_TSP } from '../../types';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -20,7 +20,6 @@ export function ExpressOnboarding({ onComplete, onCancel }: ExpressOnboardingPro
 
   // Step 1: Personal Info
   const [birthYear, setBirthYear] = useState<number>(1980);
-  const [gender, setGender] = useState<Gender>('male');
 
   // Step 2: Service History
   const [servicePeriods, setServicePeriods] = useState<ServicePeriod[]>([
@@ -40,7 +39,6 @@ export function ExpressOnboarding({ onComplete, onCancel }: ExpressOnboardingPro
     const profile: UserProfile = {
       personal: {
         birthYear,
-        gender,
       },
       employment: {
         servicePeriods,
@@ -116,39 +114,6 @@ export function ExpressOnboarding({ onComplete, onCancel }: ExpressOnboardingPro
                 />
                 <p className="text-xs text-muted-foreground mt-1">
                   Current age: {new Date().getFullYear() - birthYear}
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  What's your gender?
-                </label>
-                <div className="flex gap-4">
-                  <button
-                    type="button"
-                    onClick={() => setGender('male')}
-                    className={`flex-1 px-4 py-3 border rounded-md ${
-                      gender === 'male'
-                        ? 'border-primary bg-primary/5 font-medium'
-                        : 'border-gray-300'
-                    }`}
-                  >
-                    Male
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setGender('female')}
-                    className={`flex-1 px-4 py-3 border rounded-md ${
-                      gender === 'female'
-                        ? 'border-primary bg-primary/5 font-medium'
-                        : 'border-gray-300'
-                    }`}
-                  >
-                    Female
-                  </button>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Used for life expectancy estimates ({gender === 'male' ? '82' : '85'} years)
                 </p>
               </div>
             </div>

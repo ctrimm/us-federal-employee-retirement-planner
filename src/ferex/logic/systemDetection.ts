@@ -36,12 +36,38 @@ export function calculateTotalService(periods: ServicePeriod[]): number {
 }
 
 /**
- * Calculate service years by system (for mixed FERS/CSRS careers)
+ * Convert sick leave hours to service credit years
+ * ~2,087 hours of sick leave = 1 year of service credit (40hrs/week * 52.14 weeks)
  */
-export function calculateServiceBySystem(periods: ServicePeriod[]): {
+export function calculateSickLeaveCredit(sickLeaveHours: number): number {
+  const HOURS_PER_YEAR = 2087; // Standard work hours per year
+  return sickLeaveHours / HOURS_PER_YEAR;
+}
+
+/**
+ * Calculate total service including sick leave credit
+ */
+export function calculateTotalServiceWithSickLeave(
+  periods: ServicePeriod[],
+  sickLeaveHours: number = 0
+): number {
+  const baseService = calculateTotalService(periods);
+  const sickLeaveCredit = calculateSickLeaveCredit(sickLeaveHours);
+  return baseService + sickLeaveCredit;
+}
+
+/**
+ * Calculate service years by system (for mixed FERS/CSRS careers)
+ * Includes sick leave credit if provided
+ */
+export function calculateServiceBySystem(
+  periods: ServicePeriod[],
+  sickLeaveHours: number = 0
+): {
   fersYears: number;
   csrsYears: number;
   totalYears: number;
+  sickLeaveCredit: number;
 } {
   let fersYears = 0;
   let csrsYears = 0;
@@ -62,10 +88,24 @@ export function calculateServiceBySystem(periods: ServicePeriod[]): {
     }
   }
 
+  const sickLeaveCredit = calculateSickLeaveCredit(sickLeaveHours);
+
+  // Add sick leave credit proportionally to the dominant system
+  // Or if all FERS or all CSRS, add to that system
+  if (fersYears > csrsYears) {
+    fersYears += sickLeaveCredit;
+  } else if (csrsYears > 0) {
+    csrsYears += sickLeaveCredit;
+  } else {
+    // Default to FERS if no service (shouldn't happen)
+    fersYears += sickLeaveCredit;
+  }
+
   return {
     fersYears,
     csrsYears,
     totalYears: fersYears + csrsYears,
+    sickLeaveCredit,
   };
 }
 
