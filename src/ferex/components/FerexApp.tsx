@@ -11,13 +11,12 @@ import { ExpressOnboarding } from './onboarding/ExpressOnboarding';
 import { ComprehensiveOnboarding } from './onboarding/ComprehensiveOnboarding';
 import { Dashboard } from './dashboard/Dashboard';
 import { UnifiedControlPanel } from './dashboard/UnifiedControlPanel';
-import { ScenarioComparison } from './dashboard/ScenarioComparison';
 import { sampleScenarios } from '../data/sampleScenarios';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
-type AppView = 'landing' | 'onboarding' | 'dashboard' | 'comparison';
+type AppView = 'landing' | 'onboarding' | 'dashboard';
 type OnboardingMode = 'express' | 'comprehensive';
 
 export function FerexApp() {
@@ -29,11 +28,6 @@ export function FerexApp() {
   const [savedScenario, setSavedScenario] = useLocalStorage<Scenario | null>(
     'ferex-current-scenario',
     null
-  );
-
-  const [comparisonScenarios, setComparisonScenarios] = useLocalStorage<Scenario[]>(
-    'ferex-comparison-scenarios',
-    []
   );
 
   // Handle hydration
@@ -90,23 +84,6 @@ export function FerexApp() {
       };
       setSavedScenario(updatedScenario);
     }
-  };
-
-  const handleAddToComparison = () => {
-    if (scenario && !comparisonScenarios.find((s) => s.id === scenario.id)) {
-      setComparisonScenarios([...comparisonScenarios, scenario]);
-    }
-  };
-
-  const handleRemoveFromComparison = (id: string) => {
-    setComparisonScenarios(comparisonScenarios.filter((s) => s.id !== id));
-  };
-
-  const handleViewComparison = () => {
-    if (scenario && !comparisonScenarios.find((s) => s.id === scenario.id)) {
-      setComparisonScenarios([...comparisonScenarios, scenario]);
-    }
-    setView('comparison');
   };
 
   // Landing Page
@@ -250,19 +227,6 @@ export function FerexApp() {
     );
   }
 
-  // Comparison View
-  if (view === 'comparison') {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <ScenarioComparison
-          scenarios={comparisonScenarios}
-          onClose={() => setView('dashboard')}
-          onRemoveScenario={handleRemoveFromComparison}
-        />
-      </div>
-    );
-  }
-
   // Dashboard View
   if (view === 'dashboard' && scenario) {
     return (
@@ -272,25 +236,9 @@ export function FerexApp() {
             <Button variant="ghost" onClick={() => setView('landing')}>
               ← Back to Home
             </Button>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={handleAddToComparison}
-                disabled={comparisonScenarios.some((s) => s.id === scenario.id)}
-              >
-                {comparisonScenarios.some((s) => s.id === scenario.id)
-                  ? 'Added to Comparison'
-                  : 'Add to Comparison'}
-              </Button>
-              {comparisonScenarios.length > 0 && (
-                <Button variant="outline" onClick={handleViewComparison}>
-                  Compare Scenarios ({comparisonScenarios.length})
-                </Button>
-              )}
-              <Button variant="outline" onClick={handleStartNew}>
-                New Scenario
-              </Button>
-            </div>
+            <Button variant="outline" onClick={handleStartNew}>
+              New Scenario
+            </Button>
           </div>
         </div>
 
