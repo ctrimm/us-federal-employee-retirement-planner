@@ -3,6 +3,7 @@
  * Displays retirement projections and key metrics with interactive charts
  */
 
+import { useEffect } from 'react';
 import type { Scenario, ProjectionYear, EligibilityInfo, PensionBreakdown, UserProfile } from '../../types';
 import { formatCurrency, formatYearsOfService, formatMonthYear } from '../../utils/formatters';
 import { Card } from '@/components/ui/card';
@@ -27,6 +28,26 @@ export function Dashboard({
   onEditScenario,
   onUpdateProfile,
 }: DashboardProps) {
+  // Debug logging to track when projections change
+  useEffect(() => {
+    console.log('[Dashboard] Received new projections', {
+      count: projections.length,
+      firstAge: projections[0]?.age,
+      lastAge: projections[projections.length - 1]?.age,
+      firstYearPension: projections[0]?.pension,
+      lastYearPension: projections[projections.length - 1]?.pension,
+      timestamp: new Date().toISOString(),
+    });
+  }, [projections]);
+
+  useEffect(() => {
+    console.log('[Dashboard] Scenario changed', {
+      scenarioId: scenario.id,
+      name: scenario.name,
+      timestamp: new Date().toISOString(),
+    });
+  }, [scenario]);
+
   if (!eligibility || !pensionBreakdown) {
     return (
       <div className="flex items-center justify-center min-h-screen">
