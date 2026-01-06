@@ -3,7 +3,7 @@
  * Orchestrates onboarding, scenarios, dashboard, and comparison
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Scenario, UserProfile } from '../types';
 import { useScenario } from '../hooks/useScenario';
 import { useLocalStorage } from '../hooks/useLocalStorage';
@@ -24,6 +24,7 @@ export function FerexApp() {
   const [view, setView] = useState<AppView>('landing');
   const [onboardingMode, setOnboardingMode] = useState<OnboardingMode>('express');
   const [isControlPanelOpen, setIsControlPanelOpen] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
 
   const [savedScenario, setSavedScenario] = useLocalStorage<Scenario | null>(
     'ferex-current-scenario',
@@ -34,6 +35,11 @@ export function FerexApp() {
     'ferex-comparison-scenarios',
     []
   );
+
+  // Handle hydration
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
   const {
     scenario,
@@ -205,8 +211,8 @@ export function FerexApp() {
               </div>
             </div>
 
-            {/* Continue Previous */}
-            {savedScenario && (
+            {/* Continue Previous - only show after hydration to avoid SSR mismatch */}
+            {isHydrated && savedScenario && (
               <div className="mt-12">
                 <Button
                   variant="outline"
