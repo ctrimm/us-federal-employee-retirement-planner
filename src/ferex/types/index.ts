@@ -64,6 +64,12 @@ export interface RetirementInfo {
   survivorAnnuityType: SurvivorAnnuityType;
   intendedRetirementAge?: number;
   projectionEndAge?: number;
+  // Barista FIRE settings
+  enableBaristaFire?: boolean;
+  partTimeIncomeAnnual?: number; // Annual part-time income
+  partTimeStartAge?: number; // Age to start part-time work
+  partTimeEndAge?: number; // Age to end part-time work
+  targetRetirementIncome?: number; // Desired annual income in retirement
 }
 
 export interface TSPInfo {

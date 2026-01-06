@@ -170,8 +170,19 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       profile.assumptions.healthcareInflation
     );
 
-    // Other income (placeholder for future enhancements)
-    const otherIncome = 0;
+    // Other income - Barista FIRE part-time work
+    let otherIncome = 0;
+    if (profile.retirement.enableBaristaFire &&
+        profile.retirement.partTimeIncomeAnnual &&
+        profile.retirement.partTimeStartAge &&
+        profile.retirement.partTimeEndAge) {
+      const partTimeStart = profile.retirement.partTimeStartAge;
+      const partTimeEnd = profile.retirement.partTimeEndAge;
+
+      if (age >= partTimeStart && age <= partTimeEnd) {
+        otherIncome = profile.retirement.partTimeIncomeAnnual;
+      }
+    }
 
     // Total income
     const totalIncome = pension + tspDistribution + socialSecurity + otherIncome;

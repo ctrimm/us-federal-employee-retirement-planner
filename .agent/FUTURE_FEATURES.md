@@ -2,16 +2,39 @@
 
 This document tracks planned features and enhancements for future releases of FEREX (Federal Employee Retirement Explorer).
 
-## ✅ Completed in Current Release
+## ✅ Completed in Current Release (v1.1)
 
+### Interactive Visualizations
 - [x] Interactive income projection chart (Recharts stacked area)
-- [x] TSP balance projection chart
+- [x] TSP balance projection chart with depletion indicator
 - [x] Net worth over time chart
+- [x] Part-time work income shown separately in all charts
+
+### Control & Customization
 - [x] Side panel control system for adjusting variables
 - [x] FEHB coverage level selector (Self, Self+One, Self+Family)
+- [x] Retirement age slider (55-70)
+- [x] TSP drawdown rate control (2-10%)
+- [x] TSP return assumption slider (3-10%)
+- [x] Inflation rate control (1-6%)
+- [x] COLA rate adjustment (0-5%)
+- [x] Healthcare inflation slider (2-8%)
+
+### Scenario Management
 - [x] Scenario comparison view (side-by-side comparison)
+- [x] Add/remove scenarios dynamically
+- [x] Comparison highlights (best pension, lifetime income)
+- [x] localStorage persistence for comparison queue
 - [x] Real-time recalculation based on user inputs
-- [x] localStorage persistence for scenarios
+
+### Barista FIRE (NEW!)
+- [x] Opt-in Barista FIRE modeling
+- [x] Target retirement income setting
+- [x] Part-time income configuration ($10K-$50K annually)
+- [x] Part-time work start/end age controls
+- [x] Duration calculator (years of part-time work)
+- [x] Visual representation in charts and tables
+- [x] Green highlighting for part-time income in tables
 
 ## High Priority Features
 
@@ -109,10 +132,12 @@ This document tracks planned features and enhancements for future releases of FE
   - Show when eligible to start drawing
   - Compare immediate vs. deferred options
 
-- [ ] **Part-Time Work Income Modeling**
-  - Add post-retirement employment income
-  - Show impact on overall income
-  - Tax implications of combined income
+- [x] **Part-Time Work Income Modeling** ✅ COMPLETED (Barista FIRE)
+  - ✅ Add post-retirement employment income
+  - ✅ Show impact on overall income
+  - ✅ Configure start/end ages for part-time work
+  - ✅ Set target retirement income
+  - [ ] Tax implications of combined income (future enhancement)
 
 ### User Experience
 

@@ -7,7 +7,7 @@ import { useState } from 'react';
 import type { UserProfile, FEHBCoverageLevel } from '../../types';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { formatPercent } from '../../utils/formatters';
+import { formatPercent, formatCurrency } from '../../utils/formatters';
 
 interface ControlPanelProps {
   profile: UserProfile;
@@ -35,11 +35,33 @@ export function ControlPanel({ profile, onUpdate, isOpen, onToggle }: ControlPan
   );
   const [tspReturn, setTspReturn] = useState(profile.tsp.returnAssumption);
 
+  // Barista FIRE settings
+  const [enableBaristaFire, setEnableBaristaFire] = useState(
+    profile.retirement.enableBaristaFire || false
+  );
+  const [partTimeIncome, setPartTimeIncome] = useState(
+    profile.retirement.partTimeIncomeAnnual || 30000
+  );
+  const [partTimeStartAge, setPartTimeStartAge] = useState(
+    profile.retirement.partTimeStartAge || retirementAge
+  );
+  const [partTimeEndAge, setPartTimeEndAge] = useState(
+    profile.retirement.partTimeEndAge || (retirementAge + 10)
+  );
+  const [targetRetirementIncome, setTargetRetirementIncome] = useState(
+    profile.retirement.targetRetirementIncome || 60000
+  );
+
   const handleApply = () => {
     onUpdate({
       retirement: {
         ...profile.retirement,
         intendedRetirementAge: retirementAge,
+        enableBaristaFire,
+        partTimeIncomeAnnual: partTimeIncome,
+        partTimeStartAge,
+        partTimeEndAge,
+        targetRetirementIncome,
       },
       assumptions: {
         ...profile.assumptions,
@@ -64,6 +86,11 @@ export function ControlPanel({ profile, onUpdate, isOpen, onToggle }: ControlPan
     setHealthcareInflation(profile.assumptions.healthcareInflation);
     setFehbCoverage(profile.assumptions.fehbCoverageLevel);
     setTspReturn(profile.tsp.returnAssumption);
+    setEnableBaristaFire(profile.retirement.enableBaristaFire || false);
+    setPartTimeIncome(profile.retirement.partTimeIncomeAnnual || 30000);
+    setPartTimeStartAge(profile.retirement.partTimeStartAge || retirementAge);
+    setPartTimeEndAge(profile.retirement.partTimeEndAge || (retirementAge + 10));
+    setTargetRetirementIncome(profile.retirement.targetRetirementIncome || 60000);
   };
 
   return (
@@ -272,6 +299,120 @@ export function ControlPanel({ profile, onUpdate, isOpen, onToggle }: ControlPan
                   <div className="text-xs text-gray-500">~$11,800/year</div>
                 </button>
               </div>
+            </div>
+
+            {/* Barista FIRE (Opt-in Part-Time Work) */}
+            <div className="pt-6 border-t">
+              <div className="mb-4">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={enableBaristaFire}
+                    onChange={(e) => setEnableBaristaFire(e.target.checked)}
+                    className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                  />
+                  <div>
+                    <div className="font-medium">Enable Barista FIRE</div>
+                    <div className="text-xs text-gray-500">
+                      Work part-time in early retirement for additional income
+                    </div>
+                  </div>
+                </label>
+              </div>
+
+              {enableBaristaFire && (
+                <div className="space-y-4 pl-8 border-l-2 border-blue-200">
+                  {/* Target Retirement Income */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Target Annual Income: {formatCurrency(targetRetirementIncome, 0)}
+                    </label>
+                    <input
+                      type="range"
+                      min="30000"
+                      max="150000"
+                      step="5000"
+                      value={targetRetirementIncome}
+                      onChange={(e) => setTargetRetirementIncome(parseInt(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                      <span>$30K</span>
+                      <span>$150K</span>
+                    </div>
+                  </div>
+
+                  {/* Part-Time Income */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Part-Time Annual Income: {formatCurrency(partTimeIncome, 0)}
+                    </label>
+                    <input
+                      type="range"
+                      min="10000"
+                      max="50000"
+                      step="2500"
+                      value={partTimeIncome}
+                      onChange={(e) => setPartTimeIncome(parseInt(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
+                    />
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                      <span>$10K</span>
+                      <span>~20 hrs/wk @ $25/hr</span>
+                      <span>$50K</span>
+                    </div>
+                  </div>
+
+                  {/* Part-Time Start Age */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Start Part-Time Work at Age: {partTimeStartAge}
+                    </label>
+                    <input
+                      type="range"
+                      min="50"
+                      max="70"
+                      value={partTimeStartAge}
+                      onChange={(e) => setPartTimeStartAge(parseInt(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
+                    />
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                      <span>50</span>
+                      <span>70</span>
+                    </div>
+                  </div>
+
+                  {/* Part-Time End Age */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      End Part-Time Work at Age: {partTimeEndAge}
+                    </label>
+                    <input
+                      type="range"
+                      min={partTimeStartAge}
+                      max="75"
+                      value={partTimeEndAge}
+                      onChange={(e) => setPartTimeEndAge(parseInt(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
+                    />
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                      <span>{partTimeStartAge}</span>
+                      <span>75</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Work part-time for {partTimeEndAge - partTimeStartAge} years
+                    </p>
+                  </div>
+
+                  {/* Info Card */}
+                  <Card className="p-3 bg-green-50 border-green-200">
+                    <p className="text-xs text-green-900">
+                      <strong>Barista FIRE:</strong> Retire early from full-time work, then supplement
+                      your pension with part-time income (e.g., barista, consulting, passion projects).
+                    </p>
+                  </Card>
+                </div>
+              )}
             </div>
 
             {/* Action Buttons */}

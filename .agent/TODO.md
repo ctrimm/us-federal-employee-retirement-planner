@@ -23,16 +23,18 @@
   - [ ] Financial assumptions
   - [ ] FEHB coverage
 
-### Phase 3: Dashboard & Visualizations (✅ MVP Complete)
+### Phase 3: Dashboard & Visualizations (✅ Complete)
 - [x] Service History Display
 - [x] Retirement Eligibility Summary Card
 - [x] Pension Breakdown Card (text-based)
 - [x] Projected Retirement Income Table
+- [x] Interactive Charts (Recharts)
+  - [x] Income Projection Stacked Area Chart
+  - [x] TSP Balance Line Chart
+  - [x] Net Worth Projection Chart
+- [x] Control Panel for adjusting variables
 - [ ] Pension Breakdown Sankey Diagram - FUTURE ENHANCEMENT
-- [ ] Net Worth Projection Chart - FUTURE ENHANCEMENT
-- [ ] Sensitivity Analysis Cards - FUTURE ENHANCEMENT
 - [ ] FEHB Healthcare Cost Projection Card - FUTURE ENHANCEMENT
-- [ ] Interactive Charts (Recharts/Nivo) - FUTURE ENHANCEMENT
 
 ### Phase 4: Scenarios & Features (✅ Complete)
 - [x] Sample scenario library
@@ -41,7 +43,8 @@
   - [x] Long Career + Healthcare Focus
 - [x] Scenario loading from samples
 - [x] localStorage persistence
-- [ ] Scenario comparison view - FUTURE ENHANCEMENT
+- [x] Scenario comparison view (side-by-side)
+- [x] Barista FIRE (part-time work) modeling
 - [ ] Shareable URL with hashed parameters - FUTURE ENHANCEMENT
 
 ### Phase 5: Polish & Deploy (✅ Complete)
@@ -52,7 +55,7 @@
 - [ ] Dark mode support - FUTURE ENHANCEMENT
 - [ ] Export to PDF - FUTURE ENHANCEMENT
 
-## Current Status: MVP COMPLETE ✅
+## Current Status: V1.1 COMPLETE ✅
 
 ### What's Been Built
 
@@ -100,6 +103,32 @@
    - Static build in `/dist` folder
    - No server-side dependencies
    - All calculations client-side
+
+9. **Interactive Charts (Recharts)**
+   - Income projection stacked area chart
+   - TSP balance decline chart with depletion indicator
+   - Net worth projection chart
+   - Fully responsive and interactive
+
+10. **Control Panel**
+    - Side panel with all variable controls
+    - Retirement age, TSP drawdown, inflation, COLA sliders
+    - FEHB coverage selector (Self, Self+One, Self+Family)
+    - Barista FIRE settings (opt-in)
+    - Real-time preview and apply/reset functionality
+
+11. **Scenario Comparison**
+    - Side-by-side comparison of unlimited scenarios
+    - Highlights best options (pension, lifetime income)
+    - Add/remove scenarios dynamically
+    - Persistent comparison queue in localStorage
+
+12. **Barista FIRE Feature**
+    - Model part-time work in early retirement
+    - Set target retirement income
+    - Configure part-time income amount and duration
+    - See impact on retirement age and overall income
+    - Visualized separately in charts and tables
 
 ### File Structure
 

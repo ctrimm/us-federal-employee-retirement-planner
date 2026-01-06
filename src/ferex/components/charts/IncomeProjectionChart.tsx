@@ -27,7 +27,7 @@ export function IncomeProjectionChart({ projections }: IncomeProjectionChartProp
     Pension: p.pension,
     TSP: p.tspDistribution,
     'Social Security': p.socialSecurity,
-    Other: p.otherIncome,
+    'Part-Time Work': p.otherIncome,
   }));
 
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -108,7 +108,7 @@ export function IncomeProjectionChart({ projections }: IncomeProjectionChartProp
         />
         <Area
           type="monotone"
-          dataKey="Other"
+          dataKey="Part-Time Work"
           stackId="1"
           stroke="#8b5cf6"
           fill="url(#colorOther)"

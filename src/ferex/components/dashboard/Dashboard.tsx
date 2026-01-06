@@ -237,8 +237,9 @@ export function Dashboard({
                   <th className="text-left py-2 px-2">Age</th>
                   <th className="text-right py-2 px-2">Pension</th>
                   <th className="text-right py-2 px-2">TSP</th>
-                  <th className="text-right py-2 px-2">Social Security</th>
-                  <th className="text-right py-2 px-2">Total Income</th>
+                  <th className="text-right py-2 px-2">Part-Time</th>
+                  <th className="text-right py-2 px-2">Soc. Sec.</th>
+                  <th className="text-right py-2 px-2">Total</th>
                   <th className="text-right py-2 px-2">TSP Balance</th>
                 </tr>
               </thead>
@@ -251,6 +252,9 @@ export function Dashboard({
                     </td>
                     <td className="text-right py-2 px-2">
                       {formatCurrency(projection.tspDistribution, 0)}
+                    </td>
+                    <td className="text-right py-2 px-2 text-green-600">
+                      {projection.otherIncome > 0 ? formatCurrency(projection.otherIncome, 0) : '—'}
                     </td>
                     <td className="text-right py-2 px-2">
                       {formatCurrency(projection.socialSecurity, 0)}
