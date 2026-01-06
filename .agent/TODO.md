@@ -9,19 +9,19 @@
 - [x] Build retirement calculation engine
 - [x] Create core data models
 
-### Phase 2: Onboarding Flow (✅ MVP Complete)
+### Phase 2: Onboarding Flow (✅ Complete)
 - [x] Express onboarding (3-step)
   - [x] Personal info step
   - [x] Service history timeline input
   - [x] Income & TSP step
-- [ ] Comprehensive onboarding (7-step) - FUTURE ENHANCEMENT
-  - [ ] Service history
-  - [ ] High-3 calculation
-  - [ ] Survivor benefits
-  - [ ] TSP details
-  - [ ] Spouse/family info
-  - [ ] Financial assumptions
-  - [ ] FEHB coverage
+- [x] Comprehensive onboarding (7-step)
+  - [x] Service history (multiple periods with break detection)
+  - [x] High-3 calculation (actual 3-year salaries)
+  - [x] Survivor benefits (calculator with impact analysis)
+  - [x] TSP details (fund allocation breakdown)
+  - [x] Spouse/family info (with FEHB recommendations)
+  - [x] Financial assumptions (customizable rates)
+  - [x] FEHB coverage (plan comparison)
 
 ### Phase 3: Dashboard & Visualizations (✅ Complete)
 - [x] Service History Display
@@ -55,7 +55,7 @@
 - [ ] Dark mode support - FUTURE ENHANCEMENT
 - [ ] Export to PDF - FUTURE ENHANCEMENT
 
-## Current Status: V1.1 COMPLETE ✅
+## Current Status: V1.2 COMPLETE ✅
 
 ### What's Been Built
 
@@ -130,6 +130,16 @@
     - See impact on retirement age and overall income
     - Visualized separately in charts and tables
 
+13. **Comprehensive Onboarding (7-step)**
+    - Multiple service periods with break detection
+    - Actual High-3 salary inputs (3 consecutive years)
+    - Survivor benefit calculator with impact analysis
+    - TSP fund allocation breakdown (C, S, I, F, G funds)
+    - Spouse/family information with FEHB recommendations
+    - Customizable financial assumptions (inflation, COLA, healthcare)
+    - FEHB coverage selection with cost comparison
+    - Mode toggle between Express (3-step) and Comprehensive (7-step)
+
 ### File Structure
 
 ```
@@ -191,13 +201,10 @@ See `.agent/DEPLOYMENT.md` for full deployment instructions including:
 ## Future Enhancements
 
 ### High Priority
-- [ ] Interactive charts (Recharts for income/TSP over time)
-- [ ] Sankey diagram for pension calculation flow
-- [ ] Scenario comparison (side-by-side view)
 - [ ] Export to PDF
+- [ ] Sankey diagram for pension calculation flow
 
 ### Medium Priority
-- [ ] Comprehensive onboarding flow (7 steps)
 - [ ] Dark mode support
 - [ ] URL-based scenario sharing
 - [ ] More sample scenarios
@@ -205,7 +212,6 @@ See `.agent/DEPLOYMENT.md` for full deployment instructions including:
 
 ### Low Priority
 - [ ] Social Security WEP/GPO adjustments
-- [ ] Part-time work income modeling
 - [ ] Multiple retirement date comparisons
 - [ ] Mobile app (PWA)
 - [ ] User accounts and cloud sync

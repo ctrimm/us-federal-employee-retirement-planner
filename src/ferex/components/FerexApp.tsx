@@ -8,6 +8,7 @@ import type { Scenario, UserProfile } from '../types';
 import { useScenario } from '../hooks/useScenario';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { ExpressOnboarding } from './onboarding/ExpressOnboarding';
+import { ComprehensiveOnboarding } from './onboarding/ComprehensiveOnboarding';
 import { Dashboard } from './dashboard/Dashboard';
 import { ControlPanel } from './dashboard/ControlPanel';
 import { ScenarioComparison } from './dashboard/ScenarioComparison';
@@ -16,9 +17,11 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 
 type AppView = 'landing' | 'onboarding' | 'dashboard' | 'comparison';
+type OnboardingMode = 'express' | 'comprehensive';
 
 export function FerexApp() {
   const [view, setView] = useState<AppView>('landing');
+  const [onboardingMode, setOnboardingMode] = useState<OnboardingMode>('express');
   const [isControlPanelOpen, setIsControlPanelOpen] = useState(false);
 
   const [savedScenario, setSavedScenario] = useLocalStorage<Scenario | null>(
@@ -54,8 +57,9 @@ export function FerexApp() {
     setView('dashboard');
   };
 
-  const handleStartNew = () => {
+  const handleStartNew = (mode: OnboardingMode = 'express') => {
     setSavedScenario(null);
+    setOnboardingMode(mode);
     setView('onboarding');
   };
 
@@ -136,7 +140,7 @@ export function FerexApp() {
                 <Button className="w-full mt-4">Start Quick Check →</Button>
               </Card>
 
-              <Card className="p-8 text-left hover:shadow-lg transition-shadow">
+              <Card className="p-8 text-left hover:shadow-lg transition-shadow cursor-pointer" onClick={() => handleStartNew('comprehensive')}>
                 <div className="mb-4">
                   <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">
                     <svg
@@ -160,9 +164,7 @@ export function FerexApp() {
                     healthcare, and scenario modeling.
                   </p>
                 </div>
-                <Button variant="outline" className="w-full mt-4" disabled>
-                  Coming Soon
-                </Button>
+                <Button className="w-full mt-4">Start Detailed Planning →</Button>
               </Card>
             </div>
 
@@ -217,10 +219,17 @@ export function FerexApp() {
   if (view === 'onboarding') {
     return (
       <div className="min-h-screen bg-gray-50 py-8">
-        <ExpressOnboarding
-          onComplete={handleOnboardingComplete}
-          onCancel={() => setView('landing')}
-        />
+        {onboardingMode === 'express' ? (
+          <ExpressOnboarding
+            onComplete={handleOnboardingComplete}
+            onCancel={() => setView('landing')}
+          />
+        ) : (
+          <ComprehensiveOnboarding
+            onComplete={handleOnboardingComplete}
+            onCancel={() => setView('landing')}
+          />
+        )}
       </div>
     );
   }

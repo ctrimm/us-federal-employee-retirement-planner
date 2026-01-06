@@ -2,7 +2,7 @@
 
 This document tracks planned features and enhancements for future releases of FEREX (Federal Employee Retirement Explorer).
 
-## ✅ Completed in Current Release (v1.1)
+## ✅ Completed in Current Release (v1.2)
 
 ### Interactive Visualizations
 - [x] Interactive income projection chart (Recharts stacked area)
@@ -27,7 +27,7 @@ This document tracks planned features and enhancements for future releases of FE
 - [x] localStorage persistence for comparison queue
 - [x] Real-time recalculation based on user inputs
 
-### Barista FIRE (NEW!)
+### Barista FIRE
 - [x] Opt-in Barista FIRE modeling
 - [x] Target retirement income setting
 - [x] Part-time income configuration ($10K-$50K annually)
@@ -35,6 +35,17 @@ This document tracks planned features and enhancements for future releases of FE
 - [x] Duration calculator (years of part-time work)
 - [x] Visual representation in charts and tables
 - [x] Green highlighting for part-time income in tables
+
+### Comprehensive Onboarding (NEW!)
+- [x] 7-step detailed onboarding flow
+- [x] Multiple service periods with automatic break detection
+- [x] High-3 salary calculation with actual 3-year inputs
+- [x] Survivor benefit calculator with impact visualization
+- [x] TSP fund allocation breakdown (C, S, I, F, G funds)
+- [x] Spouse/family information collection
+- [x] FEHB coverage recommendations based on family size
+- [x] Customizable financial assumptions
+- [x] Mode toggle between Express (3-step) and Comprehensive (7-step)
 
 ## High Priority Features
 
@@ -62,15 +73,6 @@ This document tracks planned features and enhancements for future releases of FE
   - Highlight positive/negative cash flow years
 
 ### Enhanced Onboarding
-
-- [ ] **Comprehensive 7-Step Onboarding**
-  - Service history with multiple periods
-  - Detailed High-3 calculation with actual salaries
-  - Survivor benefit calculator with impact analysis
-  - TSP allocation breakdown by fund
-  - Spouse/family information
-  - Customizable financial assumptions
-  - FEHB plan selection
 
 - [ ] **Onboarding Progress Saving**
   - Save partial completion
@@ -131,13 +133,6 @@ This document tracks planned features and enhancements for future releases of FE
   - Estimate deferred retirement benefits
   - Show when eligible to start drawing
   - Compare immediate vs. deferred options
-
-- [x] **Part-Time Work Income Modeling** ✅ COMPLETED (Barista FIRE)
-  - ✅ Add post-retirement employment income
-  - ✅ Show impact on overall income
-  - ✅ Configure start/end ages for part-time work
-  - ✅ Set target retirement income
-  - [ ] Tax implications of combined income (future enhancement)
 
 ### User Experience
 
@@ -322,9 +317,10 @@ Features are prioritized based on:
 
 ### Release Planning
 
-- **v1.0** (Current): MVP with core features
-- **v1.1** (Next): Enhanced visualizations + PDF export
-- **v1.2**: Comprehensive onboarding + special retirement categories
+- **v1.0** ✅: MVP with core features
+- **v1.1** ✅: Enhanced visualizations + control panel + scenario comparison
+- **v1.2** ✅: Barista FIRE + comprehensive onboarding
+- **v1.3** (Next): PDF export + Sankey diagram
 - **v2.0**: User accounts + mobile app + advanced features
 
 ### Contributing
