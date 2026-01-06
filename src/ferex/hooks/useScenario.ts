@@ -57,7 +57,12 @@ export function useScenario(initialScenario?: Scenario) {
       ...scenario,
       profile: {
         ...scenario.profile,
-        ...updates,
+        personal: updates.personal ? { ...scenario.profile.personal, ...updates.personal } : scenario.profile.personal,
+        employment: updates.employment ? { ...scenario.profile.employment, ...updates.employment } : scenario.profile.employment,
+        retirement: updates.retirement ? { ...scenario.profile.retirement, ...updates.retirement } : scenario.profile.retirement,
+        tsp: updates.tsp ? { ...scenario.profile.tsp, ...updates.tsp } : scenario.profile.tsp,
+        otherInvestments: updates.otherInvestments ? { ...scenario.profile.otherInvestments, ...updates.otherInvestments } : scenario.profile.otherInvestments,
+        assumptions: updates.assumptions ? { ...scenario.profile.assumptions, ...updates.assumptions } : scenario.profile.assumptions,
       },
       lastModified: new Date(),
     });

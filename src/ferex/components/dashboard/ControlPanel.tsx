@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react';
-import type { UserProfile, FEHBCoverageLevel } from '../../types';
+import type { UserProfile, FEHBCoverageLevel, ServicePeriod, OtherAccount, OtherAccountType } from '../../types';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { formatPercent, formatCurrency } from '../../utils/formatters';
@@ -52,8 +52,63 @@ export function ControlPanel({ profile, onUpdate, isOpen, onToggle }: ControlPan
     profile.retirement.targetRetirementIncome || 60000
   );
 
+  // Service History
+  const [servicePeriods, setServicePeriods] = useState<ServicePeriod[]>(
+    profile.employment.servicePeriods || []
+  );
+
+  // Other Investments
+  const [otherAccounts, setOtherAccounts] = useState<OtherAccount[]>(
+    profile.otherInvestments?.accounts || []
+  );
+
+  const addServicePeriod = () => {
+    const newPeriod: ServicePeriod = {
+      id: `period-${Date.now()}`,
+      startDate: new Date(),
+      system: 'auto',
+      isActive: false,
+    };
+    setServicePeriods([...servicePeriods, newPeriod]);
+  };
+
+  const removeServicePeriod = (id: string) => {
+    setServicePeriods(servicePeriods.filter((p) => p.id !== id));
+  };
+
+  const updateServicePeriod = (id: string, updates: Partial<ServicePeriod>) => {
+    setServicePeriods(
+      servicePeriods.map((p) => (p.id === id ? { ...p, ...updates } : p))
+    );
+  };
+
+  const addOtherAccount = () => {
+    const newAccount: OtherAccount = {
+      id: `account-${Date.now()}`,
+      name: 'New Account',
+      type: 'brokerage',
+      currentBalance: 0,
+      returnAssumption: 6.5,
+    };
+    setOtherAccounts([...otherAccounts, newAccount]);
+  };
+
+  const removeOtherAccount = (id: string) => {
+    setOtherAccounts(otherAccounts.filter((a) => a.id !== id));
+  };
+
+  const updateOtherAccount = (id: string, updates: Partial<OtherAccount>) => {
+    setOtherAccounts(
+      otherAccounts.map((a) => (a.id === id ? { ...a, ...updates } : a))
+    );
+  };
+
   const handleApply = () => {
     onUpdate({
+      employment: {
+        ...profile.employment,
+        servicePeriods,
+      },
       retirement: {
         ...profile.retirement,
         intendedRetirementAge: retirementAge,
@@ -75,6 +130,10 @@ export function ControlPanel({ profile, onUpdate, isOpen, onToggle }: ControlPan
         ...profile.tsp,
         returnAssumption: tspReturn,
       },
+      otherInvestments: {
+        accounts: otherAccounts,
+        totalBalance: otherAccounts.reduce((sum, acc) => sum + acc.currentBalance, 0),
+      },
     });
   };
 
@@ -91,6 +150,8 @@ export function ControlPanel({ profile, onUpdate, isOpen, onToggle }: ControlPan
     setPartTimeStartAge(profile.retirement.partTimeStartAge || retirementAge);
     setPartTimeEndAge(profile.retirement.partTimeEndAge || (retirementAge + 10));
     setTargetRetirementIncome(profile.retirement.targetRetirementIncome || 60000);
+    setServicePeriods(profile.employment.servicePeriods || []);
+    setOtherAccounts(profile.otherInvestments?.accounts || []);
   };
 
   return (
@@ -98,13 +159,13 @@ export function ControlPanel({ profile, onUpdate, isOpen, onToggle }: ControlPan
       {/* Toggle Button */}
       <button
         onClick={onToggle}
-        className={`fixed top-1/2 -translate-y-1/2 z-50 bg-blue-600 text-white p-3 rounded-l-lg shadow-lg hover:bg-blue-700 transition-all ${
-          isOpen ? 'right-96' : 'right-0'
+        className={`fixed top-1/2 -translate-y-1/2 z-50 bg-blue-600 text-white p-3 rounded-r-lg shadow-lg hover:bg-blue-700 transition-all ${
+          isOpen ? 'left-96' : 'left-0'
         }`}
         aria-label="Toggle control panel"
       >
         <svg
-          className={`w-6 h-6 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          className={`w-6 h-6 transition-transform ${isOpen ? '' : 'rotate-180'}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -120,8 +181,8 @@ export function ControlPanel({ profile, onUpdate, isOpen, onToggle }: ControlPan
 
       {/* Side Panel */}
       <div
-        className={`fixed top-0 right-0 h-full w-96 bg-white shadow-2xl z-40 transform transition-transform duration-300 overflow-y-auto ${
-          isOpen ? 'translate-x-0' : 'translate-x-full'
+        className={`fixed top-0 left-0 h-full w-96 bg-white shadow-2xl z-40 transform transition-transform duration-300 overflow-y-auto ${
+          isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         <div className="p-6">
@@ -139,6 +200,212 @@ export function ControlPanel({ profile, onUpdate, isOpen, onToggle }: ControlPan
           </div>
 
           <div className="space-y-6">
+            {/* Service History Section */}
+            <div className="pb-6 border-b">
+              <h3 className="text-lg font-semibold mb-3">Federal Service History</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Add or edit your federal employment periods
+              </p>
+
+              <div className="space-y-3">
+                {servicePeriods.map((period, index) => (
+                  <Card key={period.id} className="p-3 bg-gray-50">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium">Period {index + 1}</span>
+                      {servicePeriods.length > 1 && (
+                        <button
+                          onClick={() => removeServicePeriod(period.id)}
+                          className="text-red-600 hover:text-red-800 text-xs"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs font-medium mb-1">Start Date</label>
+                        <input
+                          type="date"
+                          value={period.startDate.toISOString().split('T')[0]}
+                          onChange={(e) =>
+                            updateServicePeriod(period.id, {
+                              startDate: new Date(e.target.value),
+                            })
+                          }
+                          className="w-full px-2 py-1 border rounded text-xs"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium mb-1">End Date</label>
+                        <input
+                          type="date"
+                          value={period.endDate?.toISOString().split('T')[0] || ''}
+                          onChange={(e) =>
+                            updateServicePeriod(period.id, {
+                              endDate: e.target.value ? new Date(e.target.value) : undefined,
+                              isActive: !e.target.value,
+                            })
+                          }
+                          disabled={period.isActive}
+                          className="w-full px-2 py-1 border rounded text-xs disabled:bg-gray-200"
+                        />
+                      </div>
+                    </div>
+
+                    <label className="flex items-center gap-2 mt-2">
+                      <input
+                        type="checkbox"
+                        checked={period.isActive}
+                        onChange={(e) =>
+                          updateServicePeriod(period.id, {
+                            isActive: e.target.checked,
+                            endDate: e.target.checked ? undefined : period.endDate || new Date(),
+                          })
+                        }
+                        className="w-3 h-3"
+                      />
+                      <span className="text-xs">Currently employed</span>
+                    </label>
+                  </Card>
+                ))}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={addServicePeriod}
+                  className="w-full text-sm"
+                  size="sm"
+                >
+                  + Add Service Period
+                </Button>
+              </div>
+            </div>
+
+            {/* Other Investments Section */}
+            <div className="pb-6 border-b">
+              <h3 className="text-lg font-semibold mb-3">Other Investments & Savings</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Track non-TSP accounts (IRAs, 401ks, brokerage, savings, etc.)
+              </p>
+
+              <div className="space-y-3">
+                {otherAccounts.map((account) => (
+                  <Card key={account.id} className="p-3 bg-gray-50">
+                    <div className="flex items-center justify-between mb-2">
+                      <input
+                        type="text"
+                        value={account.name}
+                        onChange={(e) =>
+                          updateOtherAccount(account.id, { name: e.target.value })
+                        }
+                        className="text-sm font-medium bg-transparent border-b border-transparent hover:border-gray-300 focus:border-blue-500 outline-none"
+                        placeholder="Account name"
+                      />
+                      <button
+                        onClick={() => removeOtherAccount(account.id)}
+                        className="text-red-600 hover:text-red-800 text-xs"
+                      >
+                        Remove
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 mb-2">
+                      <div>
+                        <label className="block text-xs font-medium mb-1">Type</label>
+                        <select
+                          value={account.type}
+                          onChange={(e) =>
+                            updateOtherAccount(account.id, { type: e.target.value as OtherAccountType })
+                          }
+                          className="w-full px-2 py-1 border rounded text-xs"
+                        >
+                          <option value="traditional_ira">Traditional IRA</option>
+                          <option value="roth_ira">Roth IRA</option>
+                          <option value="401k">401(k)</option>
+                          <option value="brokerage">Brokerage</option>
+                          <option value="savings">Savings</option>
+                          <option value="real_estate">Real Estate</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium mb-1">Balance</label>
+                        <div className="relative">
+                          <span className="absolute left-2 top-1 text-gray-500 text-xs">$</span>
+                          <input
+                            type="number"
+                            value={account.currentBalance}
+                            onChange={(e) =>
+                              updateOtherAccount(account.id, {
+                                currentBalance: parseInt(e.target.value) || 0,
+                              })
+                            }
+                            className="w-full pl-5 pr-2 py-1 border rounded text-xs"
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs font-medium mb-1">Annual Return %</label>
+                        <input
+                          type="number"
+                          value={account.returnAssumption || 6.5}
+                          onChange={(e) =>
+                            updateOtherAccount(account.id, {
+                              returnAssumption: parseFloat(e.target.value) || 6.5,
+                            })
+                          }
+                          step="0.5"
+                          className="w-full px-2 py-1 border rounded text-xs"
+                          placeholder="6.5"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="flex items-center gap-1 mt-4">
+                          <input
+                            type="checkbox"
+                            checked={account.taxDeferred || false}
+                            onChange={(e) =>
+                              updateOtherAccount(account.id, {
+                                taxDeferred: e.target.checked,
+                              })
+                            }
+                            className="w-3 h-3"
+                          />
+                          <span className="text-xs">Tax-deferred</span>
+                        </label>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={addOtherAccount}
+                  className="w-full text-sm"
+                  size="sm"
+                >
+                  + Add Investment Account
+                </Button>
+
+                {otherAccounts.length > 0 && (
+                  <Card className="p-3 bg-blue-50 border-blue-200">
+                    <p className="text-sm font-medium text-blue-900">
+                      Total Other Investments: {formatCurrency(otherAccounts.reduce((sum, acc) => sum + acc.currentBalance, 0))}
+                    </p>
+                  </Card>
+                )}
+              </div>
+            </div>
+
             {/* Retirement Age */}
             <div>
               <label className="block text-sm font-medium mb-2">

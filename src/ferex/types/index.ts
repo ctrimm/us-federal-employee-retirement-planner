@@ -80,6 +80,31 @@ export interface TSPInfo {
   employerMatch?: number; // Typically 5% for FERS
 }
 
+export type OtherAccountType =
+  | 'traditional_ira'
+  | 'roth_ira'
+  | '401k'
+  | 'brokerage'
+  | 'savings'
+  | 'real_estate'
+  | 'other';
+
+export interface OtherAccount {
+  id: string;
+  name: string;
+  type: OtherAccountType;
+  currentBalance: number;
+  annualContribution?: number;
+  returnAssumption?: number;
+  taxDeferred?: boolean; // For IRAs, 401ks
+  notes?: string;
+}
+
+export interface OtherInvestmentsInfo {
+  accounts: OtherAccount[];
+  totalBalance?: number; // Calculated from accounts
+}
+
 export interface AssumptionsInfo {
   inflationRate: number; // Default 3.5%
   colaRate: number; // Default 2.5%
@@ -93,6 +118,7 @@ export interface UserProfile {
   employment: EmploymentInfo;
   retirement: RetirementInfo;
   tsp: TSPInfo;
+  otherInvestments?: OtherInvestmentsInfo;
   assumptions: AssumptionsInfo;
 }
 
