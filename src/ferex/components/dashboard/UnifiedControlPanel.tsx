@@ -273,6 +273,9 @@ export function UnifiedControlPanel({
         lifeEvents: profile.planning?.lifeEvents || [],
       },
     });
+
+    // Close the sidebar after applying changes
+    onToggle();
   };
 
   const tabs: { id: Tab; label: string; icon: string }[] = [
