@@ -65,26 +65,19 @@ export function FerexApp() {
   };
 
   const handleUpdateProfile = (updates: Partial<UserProfile>) => {
+    console.log('[FerexApp] handleUpdateProfile called', Object.keys(updates));
+    // Hook handles all the deep merging and state updates
     updateProfile(updates);
-    if (scenario) {
-      // Deep merge the updates properly (matching the logic in useScenario hook)
-      const updatedScenario = {
-        ...scenario,
-        profile: {
-          ...scenario.profile,
-          personal: updates.personal ? { ...scenario.profile.personal, ...updates.personal } : scenario.profile.personal,
-          employment: updates.employment ? { ...scenario.profile.employment, ...updates.employment } : scenario.profile.employment,
-          retirement: updates.retirement ? { ...scenario.profile.retirement, ...updates.retirement } : scenario.profile.retirement,
-          tsp: updates.tsp ? { ...scenario.profile.tsp, ...updates.tsp } : scenario.profile.tsp,
-          otherInvestments: updates.otherInvestments ? { ...scenario.profile.otherInvestments, ...updates.otherInvestments } : scenario.profile.otherInvestments,
-          assumptions: updates.assumptions ? { ...scenario.profile.assumptions, ...updates.assumptions } : scenario.profile.assumptions,
-          planning: updates.planning ? { ...scenario.profile.planning, ...updates.planning } : scenario.profile.planning,
-        },
-        lastModified: new Date(),
-      };
-      setSavedScenario(updatedScenario);
-    }
   };
+
+  // Sync scenario changes to localStorage
+  // This runs AFTER the hook has updated the scenario state
+  useEffect(() => {
+    if (scenario) {
+      console.log('[FerexApp] Syncing scenario to localStorage', scenario.id);
+      setSavedScenario(scenario);
+    }
+  }, [scenario, setSavedScenario]);
 
   // Landing Page
   if (view === 'landing') {
