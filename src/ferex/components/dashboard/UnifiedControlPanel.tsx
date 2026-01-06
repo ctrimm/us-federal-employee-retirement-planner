@@ -374,7 +374,7 @@ export function UnifiedControlPanel({
                   min="40"
                   max="70"
                   value={leaveServiceAge}
-                  onChange={(e) => setLeaveServiceAge(parseInt(e.target.value))}
+                  onChange={(e) => setLeaveServiceAge(parseInt(e.target.value) || 40)}
                   className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
                 />
                 <div className="flex justify-between text-xs text-gray-500 mt-1">
@@ -392,7 +392,7 @@ export function UnifiedControlPanel({
                   min={Math.max(55, leaveServiceAge)}
                   max="70"
                   value={claimPensionAge}
-                  onChange={(e) => setClaimPensionAge(parseInt(e.target.value))}
+                  onChange={(e) => setClaimPensionAge(parseInt(e.target.value) || 55)}
                   className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
                 />
                 <div className="flex justify-between text-xs text-gray-500 mt-1">
@@ -411,7 +411,7 @@ export function UnifiedControlPanel({
                   max="200000"
                   step="5000"
                   value={annualExpenses}
-                  onChange={(e) => setAnnualExpenses(parseInt(e.target.value))}
+                  onChange={(e) => setAnnualExpenses(parseInt(e.target.value) || 20000)}
                   className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
                 />
               </div>
@@ -622,7 +622,7 @@ export function UnifiedControlPanel({
                         max="200000"
                         step="5000"
                         value={spouseIncome}
-                        onChange={(e) => setSpouseIncome(parseInt(e.target.value))}
+                        onChange={(e) => setSpouseIncome(parseInt(e.target.value) || 0)}
                         className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
                       />
                     </div>
@@ -635,7 +635,7 @@ export function UnifiedControlPanel({
                         min="55"
                         max="70"
                         value={spouseRetirementAge}
-                        onChange={(e) => setSpouseRetirementAge(parseInt(e.target.value))}
+                        onChange={(e) => setSpouseRetirementAge(parseInt(e.target.value) || 55)}
                         className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
                       />
                     </div>
@@ -649,7 +649,7 @@ export function UnifiedControlPanel({
                         max="100000"
                         step="5000"
                         value={spouseRetirementIncome}
-                        onChange={(e) => setSpouseRetirementIncome(parseInt(e.target.value))}
+                        onChange={(e) => setSpouseRetirementIncome(parseInt(e.target.value) || 0)}
                         className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
                       />
                     </div>
@@ -685,7 +685,7 @@ export function UnifiedControlPanel({
                         max="80000"
                         step="5000"
                         value={partTimeIncome}
-                        onChange={(e) => setPartTimeIncome(parseInt(e.target.value))}
+                        onChange={(e) => setPartTimeIncome(parseInt(e.target.value) || 10000)}
                         className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
                       />
                     </div>
@@ -698,7 +698,7 @@ export function UnifiedControlPanel({
                         min={leaveServiceAge}
                         max={claimPensionAge}
                         value={partTimeStartAge}
-                        onChange={(e) => setPartTimeStartAge(parseInt(e.target.value))}
+                        onChange={(e) => setPartTimeStartAge(parseInt(e.target.value) || leaveServiceAge)}
                         className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
                       />
                     </div>
@@ -711,7 +711,7 @@ export function UnifiedControlPanel({
                         min={partTimeStartAge}
                         max={claimPensionAge}
                         value={partTimeEndAge}
-                        onChange={(e) => setPartTimeEndAge(parseInt(e.target.value))}
+                        onChange={(e) => setPartTimeEndAge(parseInt(e.target.value) || claimPensionAge)}
                         className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
                       />
                     </div>
@@ -748,7 +748,7 @@ export function UnifiedControlPanel({
                           type="number"
                           value={child.birthYear}
                           onChange={(e) =>
-                            updateChild(child.id, { birthYear: parseInt(e.target.value) })
+                            updateChild(child.id, { birthYear: parseInt(e.target.value) || new Date().getFullYear() })
                           }
                           className="w-full px-2 py-1 border rounded"
                         />
@@ -760,7 +760,7 @@ export function UnifiedControlPanel({
                           value={child.annualCollegeCost || 0}
                           onChange={(e) =>
                             updateChild(child.id, {
-                              annualCollegeCost: parseInt(e.target.value),
+                              annualCollegeCost: parseInt(e.target.value) || 0,
                             })
                           }
                           className="w-full px-2 py-1 border rounded"
@@ -818,7 +818,7 @@ export function UnifiedControlPanel({
                         value={milestone.targetValue || 0}
                         onChange={(e) =>
                           updateMilestone(milestone.id, {
-                            targetValue: parseInt(e.target.value),
+                            targetValue: parseInt(e.target.value) || 0,
                           })
                         }
                         className="w-full px-2 py-1 border rounded"
