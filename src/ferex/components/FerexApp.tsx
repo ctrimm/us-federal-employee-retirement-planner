@@ -1,6 +1,6 @@
 /**
  * Main FEREX Application Component
- * Orchestrates onboarding, scenarios, and dashboard
+ * Orchestrates onboarding, scenarios, dashboard, and comparison
  */
 
 import { useState } from 'react';
@@ -9,17 +9,26 @@ import { useScenario } from '../hooks/useScenario';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { ExpressOnboarding } from './onboarding/ExpressOnboarding';
 import { Dashboard } from './dashboard/Dashboard';
+import { ControlPanel } from './dashboard/ControlPanel';
+import { ScenarioComparison } from './dashboard/ScenarioComparison';
 import { sampleScenarios } from '../data/sampleScenarios';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 
-type AppView = 'landing' | 'onboarding' | 'dashboard' | 'samples';
+type AppView = 'landing' | 'onboarding' | 'dashboard' | 'comparison';
 
 export function FerexApp() {
   const [view, setView] = useState<AppView>('landing');
+  const [isControlPanelOpen, setIsControlPanelOpen] = useState(false);
+
   const [savedScenario, setSavedScenario] = useLocalStorage<Scenario | null>(
     'ferex-current-scenario',
     null
+  );
+
+  const [comparisonScenarios, setComparisonScenarios] = useLocalStorage<Scenario[]>(
+    'ferex-comparison-scenarios',
+    []
   );
 
   const {
@@ -30,6 +39,7 @@ export function FerexApp() {
     isCalculating,
     createScenario,
     loadScenario,
+    updateProfile,
   } = useScenario(savedScenario || undefined);
 
   const handleOnboardingComplete = (profile: UserProfile) => {
@@ -49,6 +59,38 @@ export function FerexApp() {
     setView('onboarding');
   };
 
+  const handleUpdateProfile = (updates: Partial<UserProfile>) => {
+    updateProfile(updates);
+    if (scenario) {
+      const updatedScenario = {
+        ...scenario,
+        profile: {
+          ...scenario.profile,
+          ...updates,
+        },
+        lastModified: new Date(),
+      };
+      setSavedScenario(updatedScenario);
+    }
+  };
+
+  const handleAddToComparison = () => {
+    if (scenario && !comparisonScenarios.find((s) => s.id === scenario.id)) {
+      setComparisonScenarios([...comparisonScenarios, scenario]);
+    }
+  };
+
+  const handleRemoveFromComparison = (id: string) => {
+    setComparisonScenarios(comparisonScenarios.filter((s) => s.id !== id));
+  };
+
+  const handleViewComparison = () => {
+    if (scenario && !comparisonScenarios.find((s) => s.id === scenario.id)) {
+      setComparisonScenarios([...comparisonScenarios, scenario]);
+    }
+    setView('comparison');
+  };
+
   // Landing Page
   if (view === 'landing') {
     return (
@@ -63,7 +105,7 @@ export function FerexApp() {
             </h2>
             <p className="text-xl text-muted-foreground mb-12">
               Decode your federal retirement. Understand your FERS, CSRS, TSP, and survivor
-              benefits in minutes.
+              benefits in minutes with interactive charts and comparisons.
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
@@ -183,6 +225,32 @@ export function FerexApp() {
     );
   }
 
+  // Comparison View
+  if (view === 'comparison') {
+    // Build comparison data with projections
+    const comparisonData = comparisonScenarios.map((s) => {
+      // Create temporary scenario hook instance to get projections
+      const { useScenario: useComparisonScenario } = require('../hooks/useScenario');
+      const { projections: scenarioProjections, pensionBreakdown: scenarioPensionBreakdown } = useComparisonScenario(s);
+
+      return {
+        scenario: s,
+        projections: scenarioProjections,
+        pensionBreakdown: scenarioPensionBreakdown!,
+      };
+    }).filter((data) => data.projections.length > 0);
+
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <ScenarioComparison
+          scenarios={comparisonData}
+          onClose={() => setView('dashboard')}
+          onRemoveScenario={handleRemoveFromComparison}
+        />
+      </div>
+    );
+  }
+
   // Dashboard View
   if (view === 'dashboard' && scenario) {
     return (
@@ -192,11 +260,35 @@ export function FerexApp() {
             <Button variant="ghost" onClick={() => setView('landing')}>
               ← Back to Home
             </Button>
-            <Button variant="outline" onClick={handleStartNew}>
-              New Scenario
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={handleAddToComparison}
+                disabled={comparisonScenarios.some((s) => s.id === scenario.id)}
+              >
+                {comparisonScenarios.some((s) => s.id === scenario.id)
+                  ? 'Added to Comparison'
+                  : 'Add to Comparison'}
+              </Button>
+              {comparisonScenarios.length > 0 && (
+                <Button variant="outline" onClick={handleViewComparison}>
+                  Compare Scenarios ({comparisonScenarios.length})
+                </Button>
+              )}
+              <Button variant="outline" onClick={handleStartNew}>
+                New Scenario
+              </Button>
+            </div>
           </div>
         </div>
+
+        {/* Control Panel */}
+        <ControlPanel
+          profile={scenario.profile}
+          onUpdate={handleUpdateProfile}
+          isOpen={isControlPanelOpen}
+          onToggle={() => setIsControlPanelOpen(!isControlPanelOpen)}
+        />
 
         {isCalculating ? (
           <div className="flex items-center justify-center min-h-[400px]">
@@ -211,6 +303,7 @@ export function FerexApp() {
             projections={projections}
             eligibility={eligibility}
             pensionBreakdown={pensionBreakdown}
+            onUpdateProfile={handleUpdateProfile}
           />
         )}
       </div>

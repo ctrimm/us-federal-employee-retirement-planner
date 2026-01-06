@@ -1,11 +1,14 @@
 /**
  * Main Dashboard Component
- * Displays retirement projections and key metrics
+ * Displays retirement projections and key metrics with interactive charts
  */
 
-import type { Scenario, ProjectionYear, EligibilityInfo, PensionBreakdown } from '../../types';
+import type { Scenario, ProjectionYear, EligibilityInfo, PensionBreakdown, UserProfile } from '../../types';
 import { formatCurrency, formatYearsOfService, formatMonthYear } from '../../utils/formatters';
 import { Card } from '@/components/ui/card';
+import { IncomeProjectionChart } from '../charts/IncomeProjectionChart';
+import { TSPBalanceChart } from '../charts/TSPBalanceChart';
+import { NetWorthChart } from '../charts/NetWorthChart';
 
 interface DashboardProps {
   scenario: Scenario;
@@ -13,6 +16,7 @@ interface DashboardProps {
   eligibility: EligibilityInfo | null;
   pensionBreakdown: PensionBreakdown | null;
   onEditScenario?: () => void;
+  onUpdateProfile?: (updates: Partial<UserProfile>) => void;
 }
 
 export function Dashboard({
@@ -21,6 +25,7 @@ export function Dashboard({
   eligibility,
   pensionBreakdown,
   onEditScenario,
+  onUpdateProfile,
 }: DashboardProps) {
   if (!eligibility || !pensionBreakdown) {
     return (
@@ -36,7 +41,7 @@ export function Dashboard({
   const lastYear = projections[projections.length - 1];
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-8 max-w-7xl">
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">{scenario.name}</h1>
@@ -48,7 +53,7 @@ export function Dashboard({
       {/* Key Metrics Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {/* Retirement Age */}
-        <Card className="p-6">
+        <Card className="p-6 hover:shadow-lg transition-shadow">
           <h3 className="text-sm font-medium text-muted-foreground mb-2">
             Earliest Retirement
           </h3>
@@ -59,7 +64,7 @@ export function Dashboard({
         </Card>
 
         {/* Monthly Pension */}
-        <Card className="p-6">
+        <Card className="p-6 hover:shadow-lg transition-shadow">
           <h3 className="text-sm font-medium text-muted-foreground mb-2">
             Monthly Pension
           </h3>
@@ -72,7 +77,7 @@ export function Dashboard({
         </Card>
 
         {/* Years of Service */}
-        <Card className="p-6">
+        <Card className="p-6 hover:shadow-lg transition-shadow">
           <h3 className="text-sm font-medium text-muted-foreground mb-2">
             Total Service
           </h3>
@@ -85,7 +90,7 @@ export function Dashboard({
         </Card>
 
         {/* Retirement System */}
-        <Card className="p-6">
+        <Card className="p-6 hover:shadow-lg transition-shadow">
           <h3 className="text-sm font-medium text-muted-foreground mb-2">
             Retirement System
           </h3>
@@ -95,6 +100,36 @@ export function Dashboard({
           </p>
         </Card>
       </div>
+
+      {/* Charts Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        {/* Income Projection Chart */}
+        <Card className="p-6">
+          <h2 className="text-xl font-semibold mb-4">Retirement Income Over Time</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Stacked view of pension, TSP distributions, and Social Security
+          </p>
+          <IncomeProjectionChart projections={projections} />
+        </Card>
+
+        {/* TSP Balance Chart */}
+        <Card className="p-6">
+          <h2 className="text-xl font-semibold mb-4">TSP Balance Projection</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            How your TSP balance changes through retirement
+          </p>
+          <TSPBalanceChart projections={projections} />
+        </Card>
+      </div>
+
+      {/* Net Worth Chart - Full Width */}
+      <Card className="p-6 mb-8">
+        <h2 className="text-xl font-semibold mb-4">Net Worth Over Time</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Combined TSP balance and cumulative savings throughout retirement
+        </p>
+        <NetWorthChart projections={projections} />
+      </Card>
 
       {/* Eligibility Summary */}
       <Card className="p-6 mb-8">
@@ -148,7 +183,7 @@ export function Dashboard({
 
       {/* Pension Breakdown */}
       <Card className="p-6 mb-8">
-        <h2 className="text-xl font-semibold mb-4">Pension Calculation</h2>
+        <h2 className="text-xl font-semibold mb-4">Pension Calculation Breakdown</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <p className="text-sm text-muted-foreground">High-3 Average Salary</p>
@@ -191,10 +226,10 @@ export function Dashboard({
         </div>
       </Card>
 
-      {/* Income Projection Summary */}
+      {/* Income Projection Table (Detailed Data) */}
       {projections.length > 0 && (
         <Card className="p-6">
-          <h2 className="text-xl font-semibold mb-4">Retirement Income Projection</h2>
+          <h2 className="text-xl font-semibold mb-4">Detailed Year-by-Year Projection</h2>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -209,7 +244,7 @@ export function Dashboard({
               </thead>
               <tbody>
                 {projections.filter((_, i) => i % 5 === 0).map((projection) => (
-                  <tr key={projection.age} className="border-b">
+                  <tr key={projection.age} className="border-b hover:bg-gray-50">
                     <td className="py-2 px-2">{projection.age}</td>
                     <td className="text-right py-2 px-2">
                       {formatCurrency(projection.pension, 0)}
@@ -232,7 +267,7 @@ export function Dashboard({
             </table>
           </div>
           <p className="text-xs text-muted-foreground mt-4">
-            Showing projections every 5 years. Full year-by-year data available in export.
+            Showing projections every 5 years. Use the control panel to adjust assumptions.
           </p>
         </Card>
       )}
