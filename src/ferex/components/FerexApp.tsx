@@ -99,7 +99,7 @@ export function FerexApp() {
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
-              <Card className="p-8 text-left hover:shadow-lg transition-shadow cursor-pointer" onClick={handleStartNew}>
+              <Card className="p-8 text-left hover:shadow-lg transition-shadow cursor-pointer" onClick={() => handleStartNew()}>
                 <div className="mb-4">
                   <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
                     <svg
