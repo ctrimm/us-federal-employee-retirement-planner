@@ -38,6 +38,11 @@ export function UnifiedControlPanel({
 }: UnifiedControlPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('basics');
 
+  // Calculate current age and life expectancy for slider ranges
+  const currentYear = new Date().getFullYear();
+  const currentAge = currentYear - profile.personal.birthYear;
+  const lifeExpectancy = profile.personal.lifeExpectancy || 85;
+
   // Basics Tab
   const [leaveServiceAge, setLeaveServiceAge] = useState(
     profile.retirement.leaveServiceAge || profile.retirement.intendedRetirementAge || 62
@@ -91,10 +96,10 @@ export function UnifiedControlPanel({
     profile.retirement.partTimeIncomeAnnual || 30000
   );
   const [partTimeStartAge, setPartTimeStartAge] = useState(
-    profile.retirement.partTimeStartAge || leaveServiceAge
+    profile.retirement.partTimeStartAge || currentAge
   );
   const [partTimeEndAge, setPartTimeEndAge] = useState(
-    profile.retirement.partTimeEndAge || claimPensionAge
+    profile.retirement.partTimeEndAge || Math.min(currentAge + 10, lifeExpectancy)
   );
 
   // Family Tab
@@ -862,7 +867,7 @@ export function UnifiedControlPanel({
                   <div>
                     <div className="font-medium">Part-Time Work (Barista FIRE)</div>
                     <div className="text-xs text-gray-500">
-                      Work part-time between leaving service and claiming pension
+                      Add part-time income at any age - side hustle, gap year work, or retirement job
                     </div>
                   </div>
                 </label>
@@ -875,8 +880,8 @@ export function UnifiedControlPanel({
                       </label>
                       <input
                         type="range"
-                        min="10000"
-                        max="80000"
+                        min="5000"
+                        max="100000"
                         step="5000"
                         value={partTimeIncome}
                         onChange={(e) => setPartTimeIncome(parseInt(e.target.value) || 10000)}
@@ -889,12 +894,15 @@ export function UnifiedControlPanel({
                       </label>
                       <input
                         type="range"
-                        min={leaveServiceAge}
-                        max={claimPensionAge}
+                        min={currentAge}
+                        max={lifeExpectancy}
                         value={partTimeStartAge}
-                        onChange={(e) => setPartTimeStartAge(parseInt(e.target.value) || leaveServiceAge)}
+                        onChange={(e) => setPartTimeStartAge(parseInt(e.target.value) || currentAge)}
                         className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
                       />
+                      <div className="text-xs text-gray-500 mt-1">
+                        Age {currentAge} (now) to {lifeExpectancy}
+                      </div>
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-2">
@@ -903,11 +911,14 @@ export function UnifiedControlPanel({
                       <input
                         type="range"
                         min={partTimeStartAge}
-                        max={claimPensionAge}
+                        max={lifeExpectancy}
                         value={partTimeEndAge}
-                        onChange={(e) => setPartTimeEndAge(parseInt(e.target.value) || claimPensionAge)}
+                        onChange={(e) => setPartTimeEndAge(parseInt(e.target.value) || partTimeStartAge)}
                         className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
                       />
+                      <div className="text-xs text-gray-500 mt-1">
+                        Must be at or after start age
+                      </div>
                     </div>
                   </div>
                 )}
