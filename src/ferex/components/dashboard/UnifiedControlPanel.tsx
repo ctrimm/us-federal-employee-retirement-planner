@@ -30,6 +30,49 @@ interface UnifiedControlPanelProps {
 
 type Tab = 'basics' | 'income' | 'family' | 'goals' | 'assets';
 
+/**
+ * Safe date formatting for input[type="date"] fields
+ * Returns empty string if date is invalid
+ */
+function formatDateForInput(date: Date | undefined): string {
+  if (!date) return '';
+
+  // Check if date is valid
+  if (!(date instanceof Date) || isNaN(date.getTime())) {
+    return '';
+  }
+
+  try {
+    return date.toISOString().split('T')[0];
+  } catch (e) {
+    console.warn('Invalid date formatting:', date, e);
+    return '';
+  }
+}
+
+/**
+ * Safe date parsing from input[type="date"] fields
+ * Returns undefined if date string is invalid or incomplete
+ */
+function parseDateFromInput(value: string): Date | undefined {
+  if (!value || value.length < 10) {
+    // Date string incomplete (yyyy-MM-dd requires 10 chars)
+    return undefined;
+  }
+
+  try {
+    const date = new Date(value);
+    // Verify the date is valid
+    if (isNaN(date.getTime())) {
+      return undefined;
+    }
+    return date;
+  } catch (e) {
+    console.warn('Invalid date parsing:', value, e);
+    return undefined;
+  }
+}
+
 export function UnifiedControlPanel({
   profile,
   onUpdate,
@@ -567,22 +610,22 @@ export function UnifiedControlPanel({
                       <div className="grid grid-cols-2 gap-1">
                         <input
                           type="date"
-                          value={period.startDate.toISOString().split('T')[0]}
-                          onChange={(e) =>
-                            updateServicePeriod(period.id, {
-                              startDate: new Date(e.target.value),
-                            })
-                          }
+                          value={formatDateForInput(period.startDate)}
+                          onChange={(e) => {
+                            const date = parseDateFromInput(e.target.value);
+                            if (date) {
+                              updateServicePeriod(period.id, { startDate: date });
+                            }
+                          }}
                           className="px-2 py-1 border rounded"
                         />
                         <input
                           type="date"
-                          value={period.endDate?.toISOString().split('T')[0] || ''}
-                          onChange={(e) =>
-                            updateServicePeriod(period.id, {
-                              endDate: e.target.value ? new Date(e.target.value) : undefined,
-                            })
-                          }
+                          value={formatDateForInput(period.endDate)}
+                          onChange={(e) => {
+                            const date = parseDateFromInput(e.target.value);
+                            updateServicePeriod(period.id, { endDate: date });
+                          }}
                           disabled={period.isActive}
                           className="px-2 py-1 border rounded disabled:bg-gray-200"
                         />
@@ -643,22 +686,22 @@ export function UnifiedControlPanel({
                       <div className="grid grid-cols-2 gap-1 mb-1">
                         <input
                           type="date"
-                          value={period.startDate.toISOString().split('T')[0]}
-                          onChange={(e) =>
-                            updateNonFederalPeriod(period.id, {
-                              startDate: new Date(e.target.value),
-                            })
-                          }
+                          value={formatDateForInput(period.startDate)}
+                          onChange={(e) => {
+                            const date = parseDateFromInput(e.target.value);
+                            if (date) {
+                              updateNonFederalPeriod(period.id, { startDate: date });
+                            }
+                          }}
                           className="px-2 py-1 border rounded"
                         />
                         <input
                           type="date"
-                          value={period.endDate?.toISOString().split('T')[0] || ''}
-                          onChange={(e) =>
-                            updateNonFederalPeriod(period.id, {
-                              endDate: e.target.value ? new Date(e.target.value) : undefined,
-                            })
-                          }
+                          value={formatDateForInput(period.endDate)}
+                          onChange={(e) => {
+                            const date = parseDateFromInput(e.target.value);
+                            updateNonFederalPeriod(period.id, { endDate: date });
+                          }}
                           disabled={period.isActive}
                           className="px-2 py-1 border rounded disabled:bg-gray-200"
                         />
@@ -959,22 +1002,22 @@ export function UnifiedControlPanel({
                                   <div className="grid grid-cols-2 gap-1 mb-1">
                                     <input
                                       type="date"
-                                      value={period.startDate.toISOString().split('T')[0]}
-                                      onChange={(e) =>
-                                        updateSpouseServicePeriod(period.id, {
-                                          startDate: new Date(e.target.value),
-                                        })
-                                      }
+                                      value={formatDateForInput(period.startDate)}
+                                      onChange={(e) => {
+                                        const date = parseDateFromInput(e.target.value);
+                                        if (date) {
+                                          updateSpouseServicePeriod(period.id, { startDate: date });
+                                        }
+                                      }}
                                       className="px-1 py-1 border rounded text-xs"
                                     />
                                     <input
                                       type="date"
-                                      value={period.endDate?.toISOString().split('T')[0] || ''}
-                                      onChange={(e) =>
-                                        updateSpouseServicePeriod(period.id, {
-                                          endDate: e.target.value ? new Date(e.target.value) : undefined,
-                                        })
-                                      }
+                                      value={formatDateForInput(period.endDate)}
+                                      onChange={(e) => {
+                                        const date = parseDateFromInput(e.target.value);
+                                        updateSpouseServicePeriod(period.id, { endDate: date });
+                                      }}
                                       disabled={period.isActive}
                                       className="px-1 py-1 border rounded text-xs disabled:bg-gray-200"
                                     />

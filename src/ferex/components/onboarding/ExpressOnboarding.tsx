@@ -36,18 +36,26 @@ export function ExpressOnboarding({ onComplete, onCancel }: ExpressOnboardingPro
   const [currentSalary, setCurrentSalary] = useState<number>(85000);
   const [tspBalance, setTSPBalance] = useState<number>(150000);
 
-  // Helper function to safely parse dates
-  const handleDateChange = (value: string, callback: (date: Date) => void) => {
-    if (!value) return; // Empty value, do nothing
+  // Safe date formatting for input[type="date"] fields
+  const formatDateForInput = (date: Date | undefined): string => {
+    if (!date) return '';
+    if (!(date instanceof Date) || isNaN(date.getTime())) return '';
+    try {
+      return date.toISOString().split('T')[0];
+    } catch (e) {
+      return '';
+    }
+  };
+
+  // Safe date parsing from input[type="date"] fields
+  const parseDateFromInput = (value: string): Date | undefined => {
+    if (!value || value.length < 10) return undefined; // Date incomplete
     try {
       const date = new Date(value);
-      // Check if date is valid
-      if (!isNaN(date.getTime())) {
-        callback(date);
-      }
-    } catch (error) {
-      // Invalid date, do nothing
-      console.warn('Invalid date input:', value);
+      if (isNaN(date.getTime())) return undefined;
+      return date;
+    } catch (e) {
+      return undefined;
     }
   };
 
@@ -147,13 +155,14 @@ export function ExpressOnboarding({ onComplete, onCancel }: ExpressOnboardingPro
                 </label>
                 <input
                   type="date"
-                  value={servicePeriods[0].startDate.toISOString().split('T')[0]}
+                  value={formatDateForInput(servicePeriods[0].startDate)}
                   onChange={(e) => {
-                    handleDateChange(e.target.value, (date) => {
+                    const date = parseDateFromInput(e.target.value);
+                    if (date) {
                       const newPeriods = [...servicePeriods];
                       newPeriods[0].startDate = date;
                       setServicePeriods(newPeriods);
-                    });
+                    }
                   }}
                   className="w-full px-3 py-2 border rounded-md"
                 />
@@ -206,13 +215,12 @@ export function ExpressOnboarding({ onComplete, onCancel }: ExpressOnboardingPro
                   </label>
                   <input
                     type="date"
-                    value={servicePeriods[0].endDate?.toISOString().split('T')[0] || ''}
+                    value={formatDateForInput(servicePeriods[0].endDate)}
                     onChange={(e) => {
-                      handleDateChange(e.target.value, (date) => {
-                        const newPeriods = [...servicePeriods];
-                        newPeriods[0].endDate = date;
-                        setServicePeriods(newPeriods);
-                      });
+                      const date = parseDateFromInput(e.target.value);
+                      const newPeriods = [...servicePeriods];
+                      newPeriods[0].endDate = date;
+                      setServicePeriods(newPeriods);
                     }}
                     className="w-full px-3 py-2 border rounded-md"
                   />

@@ -92,18 +92,26 @@ export function ComprehensiveOnboarding({
   );
   const [tspDrawdownRate, setTspDrawdownRate] = useState<number>(4.0);
 
-  // Helper function to safely parse dates
-  const handleDateChange = (value: string, callback: (date: Date) => void) => {
-    if (!value) return; // Empty value, do nothing
+  // Safe date formatting for input[type="date"] fields
+  const formatDateForInput = (date: Date | undefined): string => {
+    if (!date) return '';
+    if (!(date instanceof Date) || isNaN(date.getTime())) return '';
+    try {
+      return date.toISOString().split('T')[0];
+    } catch (e) {
+      return '';
+    }
+  };
+
+  // Safe date parsing from input[type="date"] fields
+  const parseDateFromInput = (value: string): Date | undefined => {
+    if (!value || value.length < 10) return undefined; // Date incomplete
     try {
       const date = new Date(value);
-      // Check if date is valid
-      if (!isNaN(date.getTime())) {
-        callback(date);
-      }
-    } catch (error) {
-      // Invalid date, do nothing
-      console.warn('Invalid date input:', value);
+      if (isNaN(date.getTime())) return undefined;
+      return date;
+    } catch (e) {
+      return undefined;
     }
   };
 
@@ -280,14 +288,13 @@ export function ComprehensiveOnboarding({
                       </label>
                       <input
                         type="date"
-                        value={period.startDate.toISOString().split('T')[0]}
-                        onChange={(e) =>
-                          handleDateChange(e.target.value, (date) =>
-                            updateServicePeriod(period.id, {
-                              startDate: date,
-                            })
-                          )
-                        }
+                        value={formatDateForInput(period.startDate)}
+                        onChange={(e) => {
+                          const date = parseDateFromInput(e.target.value);
+                          if (date) {
+                            updateServicePeriod(period.id, { startDate: date });
+                          }
+                        }}
                         className="w-full px-3 py-2 border rounded-md text-sm"
                       />
                     </div>
@@ -298,22 +305,19 @@ export function ComprehensiveOnboarding({
                       </label>
                       <input
                         type="date"
-                        value={
-                          period.endDate?.toISOString().split('T')[0] || ''
-                        }
+                        value={formatDateForInput(period.endDate)}
                         onChange={(e) => {
+                          const date = parseDateFromInput(e.target.value);
                           if (!e.target.value) {
                             updateServicePeriod(period.id, {
                               endDate: undefined,
                               isActive: true,
                             });
-                          } else {
-                            handleDateChange(e.target.value, (date) =>
-                              updateServicePeriod(period.id, {
-                                endDate: date,
-                                isActive: false,
-                              })
-                            );
+                          } else if (date) {
+                            updateServicePeriod(period.id, {
+                              endDate: date,
+                              isActive: false,
+                            });
                           }
                         }}
                         disabled={period.isActive}
