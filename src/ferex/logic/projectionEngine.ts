@@ -225,16 +225,18 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     // Calculate total expenses (living expenses only apply after leaving service)
     let totalExpenses = stillWorking ? 0 : (annualLivingExpenses + fehbCost);
 
-    // Add college costs for children
+    // Calculate college costs for children (tracked separately for visibility)
+    let collegeCosts = 0;
     (profile.planning?.children || []).forEach(child => {
       const childAge = year - child.birthYear;
       const collegeStart = child.collegeStartAge || 18;
       const collegeEnd = collegeStart + (child.collegeYears || 4);
 
       if (childAge >= collegeStart && childAge < collegeEnd) {
-        totalExpenses += child.annualCollegeCost || 0;
+        collegeCosts += child.annualCollegeCost || 0;
       }
     });
+    totalExpenses += collegeCosts;
 
     // Add life events costs
     (profile.planning?.lifeEvents || []).forEach(event => {
@@ -299,6 +301,7 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       fehbCost,
       totalIncome,
       expenses: totalExpenses,
+      collegeCosts,
       netIncome,
       tspBalance: Math.max(0, tspBalance),
       otherInvestmentsBalance: Math.max(0, otherInvestmentsBalance),

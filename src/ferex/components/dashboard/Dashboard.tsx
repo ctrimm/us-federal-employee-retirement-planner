@@ -10,6 +10,7 @@ import { Card } from '@/components/ui/card';
 import { IncomeProjectionChart } from '../charts/IncomeProjectionChart';
 import { TSPBalanceChart } from '../charts/TSPBalanceChart';
 import { NetWorthChart } from '../charts/NetWorthChart';
+import { ExpensesChart } from '../charts/ExpensesChart';
 
 interface DashboardProps {
   scenario: Scenario;
@@ -185,6 +186,15 @@ export function Dashboard({
             Stacked view of pension, TSP distributions, and Social Security
           </p>
           <IncomeProjectionChart projections={projections} />
+        </Card>
+
+        {/* Expenses Chart */}
+        <Card className="p-6">
+          <h2 className="text-xl font-semibold mb-4">Annual Expenses Breakdown</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Living expenses, college costs, and healthcare over time
+          </p>
+          <ExpensesChart projections={projections} />
         </Card>
 
         {/* TSP Balance Chart */}

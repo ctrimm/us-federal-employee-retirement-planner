@@ -245,6 +245,7 @@ export interface ProjectionYear {
   fehbCost: number;
   totalIncome: number;
   expenses: number; // Total annual expenses
+  collegeCosts: number; // Annual college costs for children (subset of expenses)
   netIncome: number; // After FEHB, expenses, estimated taxes
   tspBalance: number; // Remaining
   otherInvestmentsBalance: number; // Combined other accounts
