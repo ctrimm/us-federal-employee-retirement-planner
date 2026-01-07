@@ -37,6 +37,11 @@ export interface SpouseInfo {
   currentIncome?: number; // Annual income
   retirementAge?: number; // When spouse plans to retire
   retirementIncome?: number; // Expected retirement income (pension, SS, etc.)
+  // Federal employment tracking
+  isFederalEmployee?: boolean; // Did/does spouse work for federal government?
+  servicePeriods?: ServicePeriod[]; // Federal service history
+  high3Salary?: number; // High-3 average salary
+  sickLeaveHours?: number; // Unused sick leave hours
 }
 
 export interface HighThreeYears {

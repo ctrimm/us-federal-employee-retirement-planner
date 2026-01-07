@@ -89,6 +89,18 @@ export function UnifiedControlPanel({
   const [spouseRetirementIncome, setSpouseRetirementIncome] = useState(
     profile.personal.spouseInfo?.retirementIncome || 0
   );
+  const [spouseIsFederal, setSpouseIsFederal] = useState(
+    profile.personal.spouseInfo?.isFederalEmployee || false
+  );
+  const [spouseServicePeriods, setSpouseServicePeriods] = useState<ServicePeriod[]>(
+    profile.personal.spouseInfo?.servicePeriods || []
+  );
+  const [spouseHigh3, setSpouseHigh3] = useState(
+    profile.personal.spouseInfo?.high3Salary || 0
+  );
+  const [spouseSickLeave, setSpouseSickLeave] = useState(
+    profile.personal.spouseInfo?.sickLeaveHours || 0
+  );
   const [enableBaristaFire, setEnableBaristaFire] = useState(
     profile.retirement.enableBaristaFire || false
   );
@@ -153,6 +165,26 @@ export function UnifiedControlPanel({
 
   const removeNonFederalPeriod = (id: string) => {
     setNonFederalPeriods(nonFederalPeriods.filter((p) => p.id !== id));
+  };
+
+  const addSpouseServicePeriod = () => {
+    setSpouseServicePeriods([
+      ...spouseServicePeriods,
+      {
+        id: `spouse-period-${Date.now()}`,
+        startDate: new Date(),
+        system: 'auto',
+        isActive: false,
+      },
+    ]);
+  };
+
+  const updateSpouseServicePeriod = (id: string, updates: Partial<ServicePeriod>) => {
+    setSpouseServicePeriods(spouseServicePeriods.map((p) => (p.id === id ? { ...p, ...updates } : p)));
+  };
+
+  const removeSpouseServicePeriod = (id: string) => {
+    setSpouseServicePeriods(spouseServicePeriods.filter((p) => p.id !== id));
   };
 
   const addOtherAccount = () => {
@@ -299,6 +331,10 @@ export function UnifiedControlPanel({
               currentIncome: spouseIncome,
               retirementAge: spouseRetirementAge,
               retirementIncome: spouseRetirementIncome,
+              isFederalEmployee: spouseIsFederal,
+              servicePeriods: spouseIsFederal ? spouseServicePeriods : undefined,
+              high3Salary: spouseIsFederal ? spouseHigh3 : undefined,
+              sickLeaveHours: spouseIsFederal ? spouseSickLeave : undefined,
             }
           : undefined,
       },
@@ -851,6 +887,125 @@ export function UnifiedControlPanel({
                         onChange={(e) => setSpouseRetirementIncome(parseInt(e.target.value) || 0)}
                         className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
                       />
+                    </div>
+
+                    {/* Federal Employment Checkbox */}
+                    <div className="pt-3 border-t">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={spouseIsFederal}
+                          onChange={(e) => setSpouseIsFederal(e.target.checked)}
+                          className="w-4 h-4"
+                        />
+                        <div>
+                          <div className="font-medium text-sm">Worked for Federal Government</div>
+                          <div className="text-xs text-gray-500">
+                            Track spouse's federal pension
+                          </div>
+                        </div>
+                      </label>
+
+                      {spouseIsFederal && (
+                        <div className="mt-3 space-y-3 pl-6 border-l-2 border-purple-200">
+                          {/* High-3 Salary */}
+                          <div>
+                            <label className="block text-xs font-medium mb-1">
+                              High-3 Salary: {formatCurrency(spouseHigh3, 0)}
+                            </label>
+                            <input
+                              type="number"
+                              placeholder="e.g., 95000"
+                              value={spouseHigh3 || ''}
+                              onChange={(e) => setSpouseHigh3(parseInt(e.target.value) || 0)}
+                              className="w-full px-2 py-1 border rounded text-sm"
+                            />
+                          </div>
+
+                          {/* Sick Leave */}
+                          <div>
+                            <label className="block text-xs font-medium mb-1">
+                              Sick Leave Hours: {spouseSickLeave}
+                            </label>
+                            <input
+                              type="number"
+                              placeholder="e.g., 2087"
+                              value={spouseSickLeave || ''}
+                              onChange={(e) => setSpouseSickLeave(parseInt(e.target.value) || 0)}
+                              className="w-full px-2 py-1 border rounded text-sm"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                              ~2,087 hours = 1 year service credit
+                            </p>
+                          </div>
+
+                          {/* Service Periods */}
+                          <div>
+                            <h5 className="text-xs font-medium mb-2">Federal Service History</h5>
+                            <div className="space-y-2 mb-2">
+                              {spouseServicePeriods.map((period, index) => (
+                                <Card key={period.id} className="p-2 bg-purple-50 text-xs">
+                                  <div className="flex justify-between items-start mb-1">
+                                    <span className="font-medium">Period {index + 1}</span>
+                                    {spouseServicePeriods.length > 1 && (
+                                      <button
+                                        onClick={() => removeSpouseServicePeriod(period.id)}
+                                        className="text-red-600 hover:text-red-800 text-xs"
+                                      >
+                                        Remove
+                                      </button>
+                                    )}
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-1 mb-1">
+                                    <input
+                                      type="date"
+                                      value={period.startDate.toISOString().split('T')[0]}
+                                      onChange={(e) =>
+                                        updateSpouseServicePeriod(period.id, {
+                                          startDate: new Date(e.target.value),
+                                        })
+                                      }
+                                      className="px-1 py-1 border rounded text-xs"
+                                    />
+                                    <input
+                                      type="date"
+                                      value={period.endDate?.toISOString().split('T')[0] || ''}
+                                      onChange={(e) =>
+                                        updateSpouseServicePeriod(period.id, {
+                                          endDate: e.target.value ? new Date(e.target.value) : undefined,
+                                        })
+                                      }
+                                      disabled={period.isActive}
+                                      className="px-1 py-1 border rounded text-xs disabled:bg-gray-200"
+                                    />
+                                  </div>
+                                  <label className="flex items-center gap-1">
+                                    <input
+                                      type="checkbox"
+                                      checked={period.isActive}
+                                      onChange={(e) =>
+                                        updateSpouseServicePeriod(period.id, {
+                                          isActive: e.target.checked,
+                                        })
+                                      }
+                                      className="w-3 h-3"
+                                    />
+                                    <span className="text-xs">Currently employed</span>
+                                  </label>
+                                </Card>
+                              ))}
+                            </div>
+                            <Button
+                              variant="outline"
+                              onClick={addSpouseServicePeriod}
+                              className="w-full text-xs h-7"
+                              size="sm"
+                            >
+                              + Add Spouse Service Period
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
