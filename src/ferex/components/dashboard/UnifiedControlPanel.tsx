@@ -123,6 +123,7 @@ export function UnifiedControlPanel({
   const [tspEmployerMatch, setTspEmployerMatch] = useState(
     profile.tsp.employerMatch || 5
   );
+  const [hasSpouse, setHasSpouse] = useState(!!profile.personal.spouseInfo);
   const [spouseIncome, setSpouseIncome] = useState(
     profile.personal.spouseInfo?.currentIncome || 0
   );
@@ -368,9 +369,11 @@ export function UnifiedControlPanel({
       },
       personal: {
         ...profile.personal,
-        spouseInfo: profile.personal.spouseInfo
+        spouseInfo: hasSpouse
           ? {
-              ...profile.personal.spouseInfo,
+              age: profile.personal.spouseInfo?.age || currentAge,
+              gender: profile.personal.spouseInfo?.gender || 'female',
+              ...profile.personal.spouseInfo, // Keep existing data if any
               currentIncome: spouseIncome,
               retirementAge: spouseRetirementAge,
               retirementIncome: spouseRetirementIncome,
@@ -959,9 +962,21 @@ export function UnifiedControlPanel({
           {activeTab === 'family' && (
             <div className="space-y-4">
               {/* Spouse/Partner Section */}
-              {profile.personal.spouseInfo && (
-                <div className="pb-4 border-b">
-                  <h3 className="font-semibold text-lg mb-3">Spouse/Partner</h3>
+              <div className="pb-4 border-b">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-lg">Spouse/Partner</h3>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={hasSpouse}
+                      onChange={(e) => setHasSpouse(e.target.checked)}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm font-medium">Track Spouse Info</span>
+                  </label>
+                </div>
+
+                {hasSpouse && (
                   <div className="space-y-3">
                     <div>
                       <label className="block text-sm font-medium mb-2">
@@ -1124,8 +1139,8 @@ export function UnifiedControlPanel({
                       )}
                     </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
               <h3 className="font-semibold text-lg">Children & College</h3>
               <div className="space-y-2">
