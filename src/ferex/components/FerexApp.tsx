@@ -59,9 +59,11 @@ export function FerexApp() {
   };
 
   const handleStartNew = (mode: OnboardingMode = 'express') => {
+    console.log('[FerexApp] handleStartNew called with mode:', mode);
     setSavedScenario(null);
     setOnboardingMode(mode);
     setView('onboarding');
+    console.log('[FerexApp] Onboarding mode set to:', mode);
   };
 
   const handleUpdateProfile = (updates: Partial<UserProfile>) => {
@@ -201,19 +203,26 @@ export function FerexApp() {
 
   // Onboarding View
   if (view === 'onboarding') {
+    console.log('[FerexApp] Rendering onboarding view, mode:', onboardingMode);
     return (
       <ErrorBoundary>
         <div className="min-h-screen bg-gray-50 py-8">
           {onboardingMode === 'express' ? (
-            <ExpressOnboarding
-              onComplete={handleOnboardingComplete}
-              onCancel={() => setView('landing')}
-            />
+            <>
+              {console.log('[FerexApp] Rendering ExpressOnboarding')}
+              <ExpressOnboarding
+                onComplete={handleOnboardingComplete}
+                onCancel={() => setView('landing')}
+              />
+            </>
           ) : (
-            <ComprehensiveOnboarding
-              onComplete={handleOnboardingComplete}
-              onCancel={() => setView('landing')}
-            />
+            <>
+              {console.log('[FerexApp] Rendering ComprehensiveOnboarding')}
+              <ComprehensiveOnboarding
+                onComplete={handleOnboardingComplete}
+                onCancel={() => setView('landing')}
+              />
+            </>
           )}
         </div>
       </ErrorBoundary>

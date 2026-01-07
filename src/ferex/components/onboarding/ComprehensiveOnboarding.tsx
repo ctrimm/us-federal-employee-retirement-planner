@@ -27,6 +27,7 @@ export function ComprehensiveOnboarding({
   onComplete,
   onCancel,
 }: ComprehensiveOnboardingProps) {
+  console.log('[ComprehensiveOnboarding] Component mounted - Detailed Planning (7 steps)');
   const [step, setStep] = useState(1);
   const totalSteps = 7;
 

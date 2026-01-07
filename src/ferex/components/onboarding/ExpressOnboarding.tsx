@@ -15,6 +15,7 @@ interface ExpressOnboardingProps {
 }
 
 export function ExpressOnboarding({ onComplete, onCancel }: ExpressOnboardingProps) {
+  console.log('[ExpressOnboarding] Component mounted - Quick Check (3 steps)');
   const [step, setStep] = useState(1);
   const totalSteps = 3;
 
