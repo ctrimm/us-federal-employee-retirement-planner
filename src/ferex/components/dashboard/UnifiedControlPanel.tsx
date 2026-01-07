@@ -484,13 +484,13 @@ export function UnifiedControlPanel({
 
               <Card className="p-3 bg-blue-50 border-blue-200">
                 <p className="text-sm text-blue-900">
-                  <strong>Flexible Retirement:</strong> Set when you leave federal service vs when you claim your pension. Model early retirement with savings!
+                  <strong>Flexible Retirement:</strong> Set your target FIRE age (when you stop working full-time) vs when you claim your pension. Model early retirement with savings or Barista FIRE!
                 </p>
               </Card>
 
               <div>
                 <label className="block text-sm font-medium mb-2">
-                  Leave Federal Service at Age: {leaveServiceAge}
+                  Target FIRE / Barista FIRE Age: {leaveServiceAge}
                 </label>
                 <input
                   type="range"
@@ -886,9 +886,82 @@ export function UnifiedControlPanel({
                 </div>
               </div>
 
+              <div>
+                <label className="flex items-center gap-2 mb-3">
+                  <input
+                    type="checkbox"
+                    checked={enableBaristaFire}
+                    onChange={(e) => setEnableBaristaFire(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  <div>
+                    <div className="font-medium">Part-Time Work (Barista FIRE)</div>
+                    <div className="text-xs text-gray-500">
+                      Add part-time income at any age - side hustle, gap year work, or retirement job
+                    </div>
+                  </div>
+                </label>
+
+                {enableBaristaFire && (
+                  <div className="space-y-3 pl-6 border-l-2 border-blue-200">
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        Annual Income: {formatCurrency(partTimeIncome, 0)}
+                      </label>
+                      <input
+                        type="range"
+                        min="5000"
+                        max="100000"
+                        step="5000"
+                        value={partTimeIncome}
+                        onChange={(e) => setPartTimeIncome(parseInt(e.target.value) || 10000)}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        Start at Age: {partTimeStartAge}
+                      </label>
+                      <input
+                        type="range"
+                        min={currentAge}
+                        max={lifeExpectancy}
+                        value={partTimeStartAge}
+                        onChange={(e) => setPartTimeStartAge(parseInt(e.target.value) || currentAge)}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
+                      />
+                      <div className="text-xs text-gray-500 mt-1">
+                        Age {currentAge} (now) to {lifeExpectancy}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        End at Age: {partTimeEndAge}
+                      </label>
+                      <input
+                        type="range"
+                        min={partTimeStartAge}
+                        max={lifeExpectancy}
+                        value={partTimeEndAge}
+                        onChange={(e) => setPartTimeEndAge(parseInt(e.target.value) || partTimeStartAge)}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
+                      />
+                      <div className="text-xs text-gray-500 mt-1">
+                        Must be at or after start age
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'family' && (
+            <div className="space-y-4">
+              {/* Spouse/Partner Section */}
               {profile.personal.spouseInfo && (
                 <div className="pb-4 border-b">
-                  <h4 className="font-medium mb-3">Spouse/Partner</h4>
+                  <h3 className="font-semibold text-lg mb-3">Spouse/Partner</h3>
                   <div className="space-y-3">
                     <div>
                       <label className="block text-sm font-medium mb-2">
@@ -1054,78 +1127,6 @@ export function UnifiedControlPanel({
                 </div>
               )}
 
-              <div>
-                <label className="flex items-center gap-2 mb-3">
-                  <input
-                    type="checkbox"
-                    checked={enableBaristaFire}
-                    onChange={(e) => setEnableBaristaFire(e.target.checked)}
-                    className="w-4 h-4"
-                  />
-                  <div>
-                    <div className="font-medium">Part-Time Work (Barista FIRE)</div>
-                    <div className="text-xs text-gray-500">
-                      Add part-time income at any age - side hustle, gap year work, or retirement job
-                    </div>
-                  </div>
-                </label>
-
-                {enableBaristaFire && (
-                  <div className="space-y-3 pl-6 border-l-2 border-blue-200">
-                    <div>
-                      <label className="block text-sm font-medium mb-2">
-                        Annual Income: {formatCurrency(partTimeIncome, 0)}
-                      </label>
-                      <input
-                        type="range"
-                        min="5000"
-                        max="100000"
-                        step="5000"
-                        value={partTimeIncome}
-                        onChange={(e) => setPartTimeIncome(parseInt(e.target.value) || 10000)}
-                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">
-                        Start at Age: {partTimeStartAge}
-                      </label>
-                      <input
-                        type="range"
-                        min={currentAge}
-                        max={lifeExpectancy}
-                        value={partTimeStartAge}
-                        onChange={(e) => setPartTimeStartAge(parseInt(e.target.value) || currentAge)}
-                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
-                      />
-                      <div className="text-xs text-gray-500 mt-1">
-                        Age {currentAge} (now) to {lifeExpectancy}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">
-                        End at Age: {partTimeEndAge}
-                      </label>
-                      <input
-                        type="range"
-                        min={partTimeStartAge}
-                        max={lifeExpectancy}
-                        value={partTimeEndAge}
-                        onChange={(e) => setPartTimeEndAge(parseInt(e.target.value) || partTimeStartAge)}
-                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
-                      />
-                      <div className="text-xs text-gray-500 mt-1">
-                        Must be at or after start age
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'family' && (
-            <div className="space-y-4">
               <h3 className="font-semibold text-lg">Children & College</h3>
               <div className="space-y-2">
                 {children.map((child) => (
@@ -1214,6 +1215,7 @@ export function UnifiedControlPanel({
                         <option value="financial_independence">Financial Independence</option>
                         <option value="net_worth_target">Net Worth Target</option>
                         <option value="debt_free">Debt Free</option>
+                        <option value="leave_without_pay">Leave Without Pay (Parental/Sabbatical)</option>
                         <option value="custom">Custom</option>
                       </select>
                       <input

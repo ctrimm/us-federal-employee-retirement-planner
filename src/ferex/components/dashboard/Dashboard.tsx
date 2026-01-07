@@ -61,6 +61,25 @@ export function Dashboard({
   const firstYear = projections[0];
   const lastYear = projections[projections.length - 1];
 
+  // Calculate FIRE Age (when net worth can sustain expenses)
+  const safeWithdrawalRate = scenario.profile.assumptions?.fireWithdrawalRate || 0.04; // 4% default
+  const calculateFireAge = (): { age: number; netWorth: number; fireNumber: number } | null => {
+    for (const year of projections) {
+      const fireNumber = year.expenses / safeWithdrawalRate;
+      // Check if liquid net worth (TSP + investments - debt) can sustain expenses
+      if (year.liquidNetWorth >= fireNumber && year.expenses > 0) {
+        return {
+          age: year.age,
+          netWorth: year.liquidNetWorth,
+          fireNumber,
+        };
+      }
+    }
+    return null;
+  };
+
+  const fireData = calculateFireAge();
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
       {/* Header */}
@@ -70,6 +89,41 @@ export function Dashboard({
           Your personalized federal retirement projection
         </p>
       </div>
+
+      {/* FIRE Age Hero Card */}
+      {fireData && (
+        <Card className="p-8 mb-8 bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-200 hover:shadow-xl transition-shadow">
+          <div className="text-center">
+            <h2 className="text-lg font-medium text-muted-foreground mb-2">
+              🎯 Your Financial Independence Age
+            </h2>
+            <p className="text-7xl font-bold text-green-600 mb-3">{fireData.age}</p>
+            <p className="text-sm text-muted-foreground mb-4">
+              Based on {(safeWithdrawalRate * 100).toFixed(1)}% safe withdrawal rate
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 text-center">
+              <div>
+                <p className="text-xs text-muted-foreground">FIRE Number</p>
+                <p className="text-lg font-semibold text-green-700">
+                  {formatCurrency(fireData.fireNumber, 0)}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Your Net Worth at FIRE</p>
+                <p className="text-lg font-semibold text-blue-700">
+                  {formatCurrency(fireData.netWorth, 0)}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Years Until FIRE</p>
+                <p className="text-lg font-semibold text-purple-700">
+                  {fireData.age - firstYear.age} years
+                </p>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Key Metrics Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

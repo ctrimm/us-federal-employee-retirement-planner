@@ -155,6 +155,7 @@ export type MilestoneType =
   | 'debt_free'
   | 'net_worth_target'
   | 'age_target'
+  | 'leave_without_pay'
   | 'custom';
 
 export type MilestoneCriteria =
