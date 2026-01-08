@@ -139,8 +139,10 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
   const spouseCurrentIncome = profile.personal.spouseInfo?.currentIncome || 0;
   const spouseRetirementIncome = profile.personal.spouseInfo?.retirementIncome || 0;
 
-  // Annual living expenses
-  const annualLivingExpenses = profile.assumptions.annualLivingExpenses || 60000;
+  // Annual living expenses (base amount in today's dollars)
+  const baseLivingExpenses = profile.assumptions.annualLivingExpenses || 60000;
+  const applyExpensesFromCurrentAge = profile.assumptions.applyExpensesFromCurrentAge || false;
+  const expenseInflationRate = profile.assumptions.expenseInflationRate || profile.assumptions.inflationRate;
 
   // Determine TSP drawdown rate
   const drawdownRate = profile.assumptions.tspDrawdownRate || 4;
@@ -167,8 +169,12 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       profile.assumptions.colaRate
     ) : 0;
 
-    // Calculate TSP distribution (only after leaving service)
-    const tspDistribution = stillWorking ? 0 : calculateTSPDistribution(tspBalance, drawdownRate);
+    // Calculate TSP distribution with age 55+ separation rule
+    // TSP can be accessed penalty-free if:
+    // 1. Age 59.5 or older (general IRS rule), OR
+    // 2. Separated from federal service at age 55+ (special TSP rule)
+    const canAccessTSP = !stillWorking && (age >= 59.5 || (leaveServiceAge >= 55 && age >= leaveServiceAge));
+    const tspDistribution = canAccessTSP ? calculateTSPDistribution(tspBalance, drawdownRate) : 0;
 
     // Calculate TSP balance for next year (growth happens regardless)
     if (!stillWorking) {
@@ -229,8 +235,15 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
 
     otherInvestmentsBalance = otherInvestmentsBalance * (1 + (otherAccountsGrowth / otherInvestmentsBalance || 0));
 
-    // Calculate total expenses (living expenses only apply after leaving service)
-    let totalExpenses = stillWorking ? 0 : (annualLivingExpenses + fehbCost);
+    // Calculate inflated living expenses for this year
+    const yearsFromStart = age - startAge;
+    const inflatedLivingExpenses = baseLivingExpenses * Math.pow(1 + expenseInflationRate / 100, yearsFromStart);
+
+    // Apply living expenses based on settings
+    // If applyExpensesFromCurrentAge is enabled, expenses start immediately
+    // Otherwise, expenses only apply after leaving service
+    const shouldApplyExpenses = applyExpensesFromCurrentAge || !stillWorking;
+    let totalExpenses = shouldApplyExpenses ? (inflatedLivingExpenses + fehbCost) : 0;
 
     // Calculate college costs for children (tracked separately for visibility)
     let collegeCosts = 0;

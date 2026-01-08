@@ -19,9 +19,11 @@ import { formatCurrency } from '../../utils/formatters';
 
 interface TSPBalanceChartProps {
   projections: ProjectionYear[];
+  syncedAge?: number | null;
+  onAgeHover?: (age: number | null) => void;
 }
 
-export function TSPBalanceChart({ projections }: TSPBalanceChartProps) {
+export function TSPBalanceChart({ projections, syncedAge, onAgeHover }: TSPBalanceChartProps) {
   // Transform data for chart
   const chartData = projections.map((p) => ({
     age: p.age,
@@ -50,6 +52,16 @@ export function TSPBalanceChart({ projections }: TSPBalanceChartProps) {
       <LineChart
         data={chartData}
         margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+        onMouseMove={(e: any) => {
+          if (e && e.activeLabel && onAgeHover) {
+            onAgeHover(Number(e.activeLabel));
+          }
+        }}
+        onMouseLeave={() => {
+          if (onAgeHover) {
+            onAgeHover(null);
+          }
+        }}
       >
         <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
         <XAxis
@@ -62,6 +74,15 @@ export function TSPBalanceChart({ projections }: TSPBalanceChartProps) {
         />
         <Tooltip content={<CustomTooltip />} />
         <Legend />
+        {syncedAge && (
+          <ReferenceLine
+            x={syncedAge}
+            stroke="#ef4444"
+            strokeWidth={2}
+            strokeDasharray="3 3"
+            label={{ value: `Age ${syncedAge}`, position: 'top', fill: '#ef4444', fontSize: 12 }}
+          />
+        )}
         {depletionAge && (
           <ReferenceLine
             x={depletionAge}

@@ -12,15 +12,18 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  ReferenceLine,
 } from 'recharts';
 import type { ProjectionYear } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
 
 interface ExpensesChartProps {
   projections: ProjectionYear[];
+  syncedAge?: number | null;
+  onAgeHover?: (age: number | null) => void;
 }
 
-export function ExpensesChart({ projections }: ExpensesChartProps) {
+export function ExpensesChart({ projections, syncedAge, onAgeHover }: ExpensesChartProps) {
   // Transform data for chart
   const chartData = projections.map((p) => ({
     age: p.age,
@@ -56,6 +59,16 @@ export function ExpensesChart({ projections }: ExpensesChartProps) {
       <AreaChart
         data={chartData}
         margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+        onMouseMove={(e: any) => {
+          if (e && e.activeLabel && onAgeHover) {
+            onAgeHover(Number(e.activeLabel));
+          }
+        }}
+        onMouseLeave={() => {
+          if (onAgeHover) {
+            onAgeHover(null);
+          }
+        }}
       >
         <defs>
           <linearGradient id="colorLiving" x1="0" y1="0" x2="0" y2="1">
@@ -82,6 +95,15 @@ export function ExpensesChart({ projections }: ExpensesChartProps) {
         />
         <Tooltip content={<CustomTooltip />} />
         <Legend />
+        {syncedAge && (
+          <ReferenceLine
+            x={syncedAge}
+            stroke="#ef4444"
+            strokeWidth={2}
+            strokeDasharray="3 3"
+            label={{ value: `Age ${syncedAge}`, position: 'top', fill: '#ef4444', fontSize: 12 }}
+          />
+        )}
         <Area
           type="monotone"
           dataKey="Living Expenses"

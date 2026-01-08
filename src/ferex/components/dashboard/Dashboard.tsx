@@ -3,7 +3,7 @@
  * Displays retirement projections and key metrics with interactive charts
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import type { Scenario, ProjectionYear, EligibilityInfo, PensionBreakdown, UserProfile } from '../../types';
 import { formatCurrency, formatYearsOfService, formatMonthYear } from '../../utils/formatters';
 import { Card } from '@/components/ui/card';
@@ -30,6 +30,9 @@ export function Dashboard({
   onEditScenario,
   onUpdateProfile,
 }: DashboardProps) {
+  // Synchronized tooltip state across all charts
+  const [syncedAge, setSyncedAge] = useState<number | null>(null);
+
   // Debug logging to track when projections change
   useEffect(() => {
     console.log('[Dashboard] Received new projections', {
@@ -178,15 +181,19 @@ export function Dashboard({
         </Card>
       </div>
 
-      {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      {/* Charts - Full Width */}
+      <div className="space-y-6 mb-8">
         {/* Income Projection Chart */}
         <Card className="p-6">
           <h2 className="text-xl font-semibold mb-4">Retirement Income Over Time</h2>
           <p className="text-sm text-muted-foreground mb-4">
             Stacked view of pension, TSP distributions, and Social Security
           </p>
-          <IncomeProjectionChart projections={projections} />
+          <IncomeProjectionChart
+            projections={projections}
+            syncedAge={syncedAge}
+            onAgeHover={setSyncedAge}
+          />
         </Card>
 
         {/* Expenses Chart */}
@@ -195,7 +202,11 @@ export function Dashboard({
           <p className="text-sm text-muted-foreground mb-4">
             Living expenses, college costs, and healthcare over time
           </p>
-          <ExpensesChart projections={projections} />
+          <ExpensesChart
+            projections={projections}
+            syncedAge={syncedAge}
+            onAgeHover={setSyncedAge}
+          />
         </Card>
 
         {/* TSP Balance Chart */}
@@ -204,7 +215,11 @@ export function Dashboard({
           <p className="text-sm text-muted-foreground mb-4">
             How your TSP balance changes through retirement
           </p>
-          <TSPBalanceChart projections={projections} />
+          <TSPBalanceChart
+            projections={projections}
+            syncedAge={syncedAge}
+            onAgeHover={setSyncedAge}
+          />
         </Card>
       </div>
 
@@ -214,7 +229,11 @@ export function Dashboard({
         <p className="text-sm text-muted-foreground mb-4">
           Combined TSP balance and cumulative savings throughout retirement
         </p>
-        <NetWorthChart projections={projections} />
+        <NetWorthChart
+          projections={projections}
+          syncedAge={syncedAge}
+          onAgeHover={setSyncedAge}
+        />
       </Card>
 
       {/* Eligibility Summary */}
@@ -311,6 +330,69 @@ export function Dashboard({
           </div>
         </div>
       </Card>
+
+      {/* Spouse Pension Callout */}
+      {scenario.profile.personal.spouseInfo?.isFederalEmployee && (
+        <Card className="p-6 mb-8 bg-purple-50 border-purple-200">
+          <div className="flex items-start gap-3">
+            <div className="text-purple-600 text-2xl">💼</div>
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-purple-900 mb-2">
+                Spouse/Partner Federal Pension
+              </h3>
+              <p className="text-sm text-purple-700 mb-4">
+                Your spouse/partner has federal service and may be eligible for their own pension.
+              </p>
+
+              {scenario.profile.personal.spouseInfo.servicePeriods &&
+               scenario.profile.personal.spouseInfo.servicePeriods.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-white p-3 rounded border border-purple-200">
+                    <p className="text-xs text-purple-600 mb-1">High-3 Salary</p>
+                    <p className="text-lg font-bold text-purple-900">
+                      {formatCurrency(scenario.profile.personal.spouseInfo.high3Salary || 0)}
+                    </p>
+                  </div>
+                  <div className="bg-white p-3 rounded border border-purple-200">
+                    <p className="text-xs text-purple-600 mb-1">Years of Service</p>
+                    <p className="text-lg font-bold text-purple-900">
+                      {scenario.profile.personal.spouseInfo.servicePeriods
+                        .reduce((total, period) => {
+                          const start = new Date(period.startDate);
+                          const end = period.endDate ? new Date(period.endDate) : new Date();
+                          const years = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+                          return total + years;
+                        }, 0)
+                        .toFixed(2)} years
+                    </p>
+                  </div>
+                  <div className="bg-white p-3 rounded border border-purple-200">
+                    <p className="text-xs text-purple-600 mb-1">Estimated Annual Pension</p>
+                    <p className="text-lg font-bold text-purple-900">
+                      {(() => {
+                        const high3 = scenario.profile.personal.spouseInfo.high3Salary || 0;
+                        const years = scenario.profile.personal.spouseInfo.servicePeriods
+                          .reduce((total, period) => {
+                            const start = new Date(period.startDate);
+                            const end = period.endDate ? new Date(period.endDate) : new Date();
+                            const yrs = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+                            return total + yrs;
+                          }, 0);
+                        const estimatedPension = high3 * 0.01 * years; // Simple FERS 1% calculation
+                        return formatCurrency(estimatedPension);
+                      })()}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <p className="text-xs text-purple-600 mt-4">
+                💡 Tip: Update spouse's service periods and High-3 salary in the Family tab for a more accurate estimate.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Detailed Year-by-Year Projection Table */}
       <ProjectionTable projections={projections} />

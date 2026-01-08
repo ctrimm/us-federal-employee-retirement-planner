@@ -14,15 +14,18 @@ import {
   ResponsiveContainer,
   Area,
   AreaChart,
+  ReferenceLine,
 } from 'recharts';
 import type { ProjectionYear } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
 
 interface NetWorthChartProps {
   projections: ProjectionYear[];
+  syncedAge?: number | null;
+  onAgeHover?: (age: number | null) => void;
 }
 
-export function NetWorthChart({ projections }: NetWorthChartProps) {
+export function NetWorthChart({ projections, syncedAge, onAgeHover }: NetWorthChartProps) {
   // Use the calculated netWorth which includes: TSP + other investments + assets - debts
   const chartData = projections.map((p) => ({
     age: p.age,
@@ -69,6 +72,16 @@ export function NetWorthChart({ projections }: NetWorthChartProps) {
       <AreaChart
         data={chartData}
         margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+        onMouseMove={(e: any) => {
+          if (e && e.activeLabel && onAgeHover) {
+            onAgeHover(Number(e.activeLabel));
+          }
+        }}
+        onMouseLeave={() => {
+          if (onAgeHover) {
+            onAgeHover(null);
+          }
+        }}
       >
         <defs>
           <linearGradient id="colorTSP" x1="0" y1="0" x2="0" y2="1">
@@ -98,6 +111,15 @@ export function NetWorthChart({ projections }: NetWorthChartProps) {
         />
         <Tooltip content={<CustomTooltip />} />
         <Legend />
+        {syncedAge && (
+          <ReferenceLine
+            x={syncedAge}
+            stroke="#ef4444"
+            strokeWidth={2}
+            strokeDasharray="3 3"
+            label={{ value: `Age ${syncedAge}`, position: 'top', fill: '#ef4444', fontSize: 12 }}
+          />
+        )}
         <Area
           type="monotone"
           dataKey="tspBalance"

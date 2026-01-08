@@ -31,11 +31,13 @@ export interface NonFederalEmploymentPeriod {
 
 export interface SpouseInfo {
   name?: string;
-  age: number;
+  birthDate?: Date; // Date of birth for spouse
+  age: number; // Current age (can be calculated from birthDate)
   gender: Gender;
   // Additional planning fields
   currentIncome?: number; // Annual income
-  retirementAge?: number; // When spouse plans to retire
+  retirementAge?: number; // When spouse plans to retire (main retirement age)
+  leaveServiceAge?: number; // When spouse leaves their job (if different from retirement)
   retirementIncome?: number; // Expected retirement income (pension, SS, etc.)
   // Federal employment tracking
   isFederalEmployee?: boolean; // Did/does spouse work for federal government?
@@ -100,6 +102,7 @@ export interface RetirementInfo {
 export interface TSPInfo {
   currentBalance: number;
   annualContribution: number;
+  contributionPercent?: number; // Percentage of salary (e.g., 5 for 5%)
   returnAssumption: number; // Default 6.5%
   currentAllocation?: TSPAllocation;
   employerMatch?: number; // Typically 5% for FERS
@@ -137,6 +140,8 @@ export interface AssumptionsInfo {
   fehbCoverageLevel: FEHBCoverageLevel;
   tspDrawdownRate?: number; // Default 4%
   annualLivingExpenses?: number; // Expected annual expenses in retirement
+  applyExpensesFromCurrentAge?: boolean; // Start expenses at current age instead of retirement
+  expenseInflationRate?: number; // Rate to inflate expenses (defaults to inflationRate)
 }
 
 // Life Events & Milestones

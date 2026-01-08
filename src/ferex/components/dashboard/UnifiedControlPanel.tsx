@@ -100,6 +100,12 @@ export function UnifiedControlPanel({
   const [annualExpenses, setAnnualExpenses] = useState(
     profile.assumptions.annualLivingExpenses || 60000
   );
+  const [applyExpensesFromCurrentAge, setApplyExpensesFromCurrentAge] = useState(
+    profile.assumptions.applyExpensesFromCurrentAge || false
+  );
+  const [expenseInflationRate, setExpenseInflationRate] = useState(
+    profile.assumptions.expenseInflationRate || profile.assumptions.inflationRate
+  );
   const [servicePeriods, setServicePeriods] = useState<ServicePeriod[]>(
     profile.employment.servicePeriods || []
   );
@@ -117,8 +123,14 @@ export function UnifiedControlPanel({
   const [federalSalary, setFederalSalary] = useState(
     profile.employment.currentOrLastSalary || 100000
   );
-  const [tspContribution, setTspContribution] = useState(
-    profile.tsp.annualContribution || 5000
+  // Calculate initial contribution percent from annualContribution if needed
+  const initialContribPercent = profile.tsp.contributionPercent ||
+    (profile.employment.currentOrLastSalary > 0
+      ? (profile.tsp.annualContribution / profile.employment.currentOrLastSalary) * 100
+      : 5);
+
+  const [tspContributionPercent, setTspContributionPercent] = useState(
+    initialContribPercent
   );
   const [tspEmployerMatch, setTspEmployerMatch] = useState(
     profile.tsp.employerMatch || 5
@@ -127,11 +139,17 @@ export function UnifiedControlPanel({
     profile.retirement.sideHustleIncome || 0
   );
   const [hasSpouse, setHasSpouse] = useState(!!profile.personal.spouseInfo);
+  const [spouseBirthDate, setSpouseBirthDate] = useState<Date | undefined>(
+    profile.personal.spouseInfo?.birthDate
+  );
   const [spouseIncome, setSpouseIncome] = useState(
     profile.personal.spouseInfo?.currentIncome || 0
   );
   const [spouseRetirementAge, setSpouseRetirementAge] = useState(
     profile.personal.spouseInfo?.retirementAge || 65
+  );
+  const [spouseLeaveServiceAge, setSpouseLeaveServiceAge] = useState(
+    profile.personal.spouseInfo?.leaveServiceAge || 65
   );
   const [spouseRetirementIncome, setSpouseRetirementIncome] = useState(
     profile.personal.spouseInfo?.retirementIncome || 0
@@ -363,13 +381,16 @@ export function UnifiedControlPanel({
       tsp: {
         ...profile.tsp,
         returnAssumption: tspReturn,
-        annualContribution: tspContribution,
+        contributionPercent: tspContributionPercent,
+        annualContribution: (federalSalary * tspContributionPercent) / 100,
         employerMatch: tspEmployerMatch,
       },
       assumptions: {
         ...profile.assumptions,
         tspDrawdownRate,
         annualLivingExpenses: annualExpenses,
+        applyExpensesFromCurrentAge,
+        expenseInflationRate,
       },
       personal: {
         ...profile.personal,
@@ -378,8 +399,10 @@ export function UnifiedControlPanel({
               age: profile.personal.spouseInfo?.age || currentAge,
               gender: profile.personal.spouseInfo?.gender || 'female',
               ...profile.personal.spouseInfo, // Keep existing data if any
+              birthDate: spouseBirthDate,
               currentIncome: spouseIncome,
               retirementAge: spouseRetirementAge,
+              leaveServiceAge: spouseLeaveServiceAge,
               retirementIncome: spouseRetirementIncome,
               isFederalEmployee: spouseIsFederal,
               servicePeriods: spouseIsFederal ? spouseServicePeriods : undefined,
@@ -544,6 +567,44 @@ export function UnifiedControlPanel({
                   onChange={(e) => setAnnualExpenses(parseInt(e.target.value) || 20000)}
                   className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
                 />
+
+                {/* Expense Timing & Inflation Controls */}
+                <div className="mt-3 pt-3 border-t">
+                  <label className="flex items-center gap-2 mb-2">
+                    <input
+                      type="checkbox"
+                      checked={applyExpensesFromCurrentAge}
+                      onChange={(e) => setApplyExpensesFromCurrentAge(e.target.checked)}
+                      className="w-4 h-4"
+                    />
+                    <div>
+                      <div className="text-sm font-medium">Start expenses at current age</div>
+                      <div className="text-xs text-gray-500">
+                        Apply living expenses now, not just after retirement
+                      </div>
+                    </div>
+                  </label>
+
+                  {applyExpensesFromCurrentAge && (
+                    <div className="mt-2 pl-6">
+                      <label className="block text-xs font-medium mb-1">
+                        Expense Inflation Rate: {expenseInflationRate.toFixed(1)}%
+                      </label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="10"
+                        step="0.1"
+                        value={expenseInflationRate}
+                        onChange={(e) => setExpenseInflationRate(parseFloat(e.target.value) || 3.5)}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-orange-600"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Expenses increase by this rate annually to account for inflation
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div>
@@ -847,19 +908,19 @@ export function UnifiedControlPanel({
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-2">
-                      TSP Annual Contribution: {formatCurrency(tspContribution, 0)}
+                      Employee Contribution: {tspContributionPercent.toFixed(1)}%
                     </label>
                     <input
                       type="range"
                       min="0"
-                      max="30000"
-                      step="500"
-                      value={tspContribution}
-                      onChange={(e) => setTspContribution(parseInt(e.target.value) || 0)}
+                      max="100"
+                      step="0.5"
+                      value={tspContributionPercent}
+                      onChange={(e) => setTspContributionPercent(parseFloat(e.target.value) || 0)}
                       className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
                     />
                     <div className="text-xs text-gray-500 mt-1">
-                      {((tspContribution / federalSalary) * 100).toFixed(1)}% of salary
+                      {formatCurrency((federalSalary * tspContributionPercent) / 100, 0)}/year
                     </div>
                   </div>
                   <div>
@@ -999,6 +1060,17 @@ export function UnifiedControlPanel({
                 {hasSpouse && (
                   <div className="space-y-3">
                     <div>
+                      <label className="block text-sm font-medium mb-1">
+                        Date of Birth
+                      </label>
+                      <input
+                        type="date"
+                        value={formatDateForInput(spouseBirthDate)}
+                        onChange={(e) => setSpouseBirthDate(parseDateFromInput(e.target.value))}
+                        className="w-full px-3 py-1.5 border rounded text-sm"
+                      />
+                    </div>
+                    <div>
                       <label className="block text-sm font-medium mb-2">
                         Current Income: {formatCurrency(spouseIncome, 0)}
                       </label>
@@ -1014,7 +1086,23 @@ export function UnifiedControlPanel({
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-2">
-                        Retirement Age: {spouseRetirementAge}
+                        Leave Service / Job Age: {spouseLeaveServiceAge}
+                      </label>
+                      <input
+                        type="range"
+                        min="50"
+                        max="75"
+                        value={spouseLeaveServiceAge}
+                        onChange={(e) => setSpouseLeaveServiceAge(parseInt(e.target.value) || 55)}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Age when spouse stops working at their current job
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        Claim Retirement Benefits Age: {spouseRetirementAge}
                       </label>
                       <input
                         type="range"
@@ -1024,6 +1112,9 @@ export function UnifiedControlPanel({
                         onChange={(e) => setSpouseRetirementAge(parseInt(e.target.value) || 55)}
                         className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
                       />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Age when spouse begins receiving pension/Social Security
+                      </p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-2">
