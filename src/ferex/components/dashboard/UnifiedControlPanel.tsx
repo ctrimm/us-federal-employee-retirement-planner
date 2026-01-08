@@ -123,6 +123,9 @@ export function UnifiedControlPanel({
   const [tspEmployerMatch, setTspEmployerMatch] = useState(
     profile.tsp.employerMatch || 5
   );
+  const [sideHustleIncome, setSideHustleIncome] = useState(
+    profile.retirement.sideHustleIncome || 0
+  );
   const [hasSpouse, setHasSpouse] = useState(!!profile.personal.spouseInfo);
   const [spouseIncome, setSpouseIncome] = useState(
     profile.personal.spouseInfo?.currentIncome || 0
@@ -355,6 +358,7 @@ export function UnifiedControlPanel({
         partTimeIncomeAnnual: partTimeIncome,
         partTimeStartAge,
         partTimeEndAge,
+        sideHustleIncome,
       },
       tsp: {
         ...profile.tsp,
@@ -709,28 +713,17 @@ export function UnifiedControlPanel({
                           className="px-2 py-1 border rounded disabled:bg-gray-200"
                         />
                       </div>
-                      <div className="grid grid-cols-2 gap-1 mb-1">
+                      <div className="mb-1">
                         <input
                           type="number"
-                          placeholder="Salary"
+                          placeholder="Annual Salary (optional)"
                           value={period.annualSalary || ''}
                           onChange={(e) =>
                             updateNonFederalPeriod(period.id, {
                               annualSalary: parseInt(e.target.value) || 0,
                             })
                           }
-                          className="px-2 py-1 border rounded text-xs"
-                        />
-                        <input
-                          type="number"
-                          placeholder="401k contrib"
-                          value={period.annual401kContribution || ''}
-                          onChange={(e) =>
-                            updateNonFederalPeriod(period.id, {
-                              annual401kContribution: parseInt(e.target.value) || 0,
-                            })
-                          }
-                          className="px-2 py-1 border rounded text-xs"
+                          className="w-full px-2 py-1 border rounded text-xs"
                         />
                       </div>
                       <label className="flex items-center gap-1 mt-1">
@@ -834,13 +827,13 @@ export function UnifiedControlPanel({
             <div className="space-y-4">
               <h3 className="font-semibold text-lg">Income Sources</h3>
 
-              {/* Federal Employment Income */}
+              {/* Current Employment Income */}
               <div className="pb-4 border-b">
-                <h4 className="font-medium mb-3">Your Federal Employment</h4>
+                <h4 className="font-medium mb-3">Current Employment</h4>
                 <div className="space-y-3">
                   <div>
                     <label className="block text-sm font-medium mb-2">
-                      Current Annual Salary: {formatCurrency(federalSalary, 0)}
+                      Annual Salary: {formatCurrency(federalSalary, 0)}
                     </label>
                     <input
                       type="range"
@@ -886,6 +879,33 @@ export function UnifiedControlPanel({
                       Employer contributes: {formatCurrency((federalSalary * tspEmployerMatch) / 100, 0)}/year
                     </div>
                   </div>
+                </div>
+              </div>
+
+              {/* Side Hustle Income */}
+              <div className="pb-4 border-t pt-4">
+                <h4 className="font-medium mb-3">Side Hustle / Passive Income</h4>
+                <p className="text-xs text-gray-500 mb-3">
+                  Uber, DoorDash, Etsy sales, freelancing, rental income, etc.
+                </p>
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Annual Side Income: {formatCurrency(sideHustleIncome, 0)}
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="50000"
+                    step="1000"
+                    value={sideHustleIncome}
+                    onChange={(e) => setSideHustleIncome(parseInt(e.target.value) || 0)}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    {sideHustleIncome > 0
+                      ? `That's ${formatCurrency(sideHustleIncome / 12, 0)}/month extra income`
+                      : 'Set to 0 if no side income'}
+                  </p>
                 </div>
               </div>
 
@@ -1277,29 +1297,55 @@ export function UnifiedControlPanel({
                           Remove
                         </button>
                       </div>
-                      <div className="grid grid-cols-2 gap-1">
-                        <input
-                          type="number"
-                          value={debt.currentBalance}
-                          onChange={(e) =>
-                            updateDebt(debt.id, {
-                              currentBalance: parseInt(e.target.value) || 0,
-                            })
-                          }
-                          className="px-2 py-1 border rounded text-xs"
-                          placeholder="Balance"
-                        />
-                        <input
-                          type="number"
-                          value={debt.interestRate}
-                          onChange={(e) =>
-                            updateDebt(debt.id, {
-                              interestRate: parseFloat(e.target.value) || 0,
-                            })
-                          }
-                          className="px-2 py-1 border rounded text-xs"
-                          placeholder="Rate %"
-                        />
+                      <div className="space-y-1">
+                        <div className="grid grid-cols-2 gap-1">
+                          <input
+                            type="number"
+                            value={debt.currentBalance}
+                            onChange={(e) =>
+                              updateDebt(debt.id, {
+                                currentBalance: parseInt(e.target.value) || 0,
+                              })
+                            }
+                            className="px-2 py-1 border rounded text-xs"
+                            placeholder="Balance"
+                          />
+                          <input
+                            type="number"
+                            value={debt.interestRate}
+                            onChange={(e) =>
+                              updateDebt(debt.id, {
+                                interestRate: parseFloat(e.target.value) || 0,
+                              })
+                            }
+                            className="px-2 py-1 border rounded text-xs"
+                            placeholder="Rate %"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-1">
+                          <input
+                            type="number"
+                            value={debt.minimumPayment || ''}
+                            onChange={(e) =>
+                              updateDebt(debt.id, {
+                                minimumPayment: parseInt(e.target.value) || 0,
+                              })
+                            }
+                            className="px-2 py-1 border rounded text-xs"
+                            placeholder="Min Payment/mo"
+                          />
+                          <input
+                            type="number"
+                            value={debt.extraPayment || ''}
+                            onChange={(e) =>
+                              updateDebt(debt.id, {
+                                extraPayment: parseInt(e.target.value) || 0,
+                              })
+                            }
+                            className="px-2 py-1 border rounded text-xs"
+                            placeholder="Extra Payment/mo"
+                          />
+                        </div>
                       </div>
                     </Card>
                   ))}

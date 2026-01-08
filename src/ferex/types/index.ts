@@ -93,6 +93,7 @@ export interface RetirementInfo {
   partTimeIncomeAnnual?: number; // Annual part-time income
   partTimeStartAge?: number; // Age to start part-time work
   partTimeEndAge?: number; // Age to end part-time work
+  sideHustleIncome?: number; // Annual side hustle/passive income (Uber, Etsy, etc.)
   targetRetirementIncome?: number; // Desired annual income in retirement
 }
 

@@ -201,8 +201,10 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       }
     }
 
-    // Other income - Barista FIRE part-time work
+    // Other income - Barista FIRE part-time work + side hustle
     let otherIncome = 0;
+
+    // Add Barista FIRE income (age-limited)
     if (profile.retirement.enableBaristaFire &&
         profile.retirement.partTimeIncomeAnnual &&
         profile.retirement.partTimeStartAge &&
@@ -211,8 +213,13 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       const partTimeEnd = profile.retirement.partTimeEndAge;
 
       if (age >= partTimeStart && age <= partTimeEnd) {
-        otherIncome = profile.retirement.partTimeIncomeAnnual;
+        otherIncome += profile.retirement.partTimeIncomeAnnual;
       }
+    }
+
+    // Add side hustle income (active throughout life - Uber, Etsy, etc.)
+    if (profile.retirement.sideHustleIncome) {
+      otherIncome += profile.retirement.sideHustleIncome;
     }
 
     // Calculate other investments growth
