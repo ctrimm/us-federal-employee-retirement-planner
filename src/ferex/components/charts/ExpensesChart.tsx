@@ -14,22 +14,26 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from 'recharts';
-import type { ProjectionYear } from '../../types';
+import type { ProjectionYear, EligibilityInfo } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
 
 interface ExpensesChartProps {
   projections: ProjectionYear[];
+  eligibility: EligibilityInfo | null;
   syncedAge?: number | null;
   onAgeHover?: (age: number | null) => void;
 }
 
-export function ExpensesChart({ projections, syncedAge, onAgeHover }: ExpensesChartProps) {
+export function ExpensesChart({ projections, eligibility, syncedAge, onAgeHover }: ExpensesChartProps) {
+  // Only include FEHB if user is eligible
+  const showFEHB = eligibility?.fehbEligible ?? false;
+
   // Transform data for chart
   const chartData = projections.map((p) => ({
     age: p.age,
-    'Living Expenses': Math.max(0, p.expenses - p.collegeCosts - p.fehbCost),
+    'Living Expenses': Math.max(0, p.expenses - p.collegeCosts - (showFEHB ? p.fehbCost : 0)),
     'College Costs': p.collegeCosts,
-    'FEHB Healthcare': p.fehbCost,
+    ...(showFEHB && { 'FEHB Healthcare': p.fehbCost }),
   }));
 
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -118,13 +122,15 @@ export function ExpensesChart({ projections, syncedAge, onAgeHover }: ExpensesCh
           stroke="#ec4899"
           fill="url(#colorCollege)"
         />
-        <Area
-          type="monotone"
-          dataKey="FEHB Healthcare"
-          stackId="1"
-          stroke="#14b8a6"
-          fill="url(#colorFEHB)"
-        />
+        {showFEHB && (
+          <Area
+            type="monotone"
+            dataKey="FEHB Healthcare"
+            stackId="1"
+            stroke="#14b8a6"
+            fill="url(#colorFEHB)"
+          />
+        )}
       </AreaChart>
     </ResponsiveContainer>
   );

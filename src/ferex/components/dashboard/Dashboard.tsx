@@ -204,6 +204,7 @@ export function Dashboard({
           </p>
           <ExpensesChart
             projections={projections}
+            eligibility={eligibility}
             syncedAge={syncedAge}
             onAgeHover={setSyncedAge}
           />
