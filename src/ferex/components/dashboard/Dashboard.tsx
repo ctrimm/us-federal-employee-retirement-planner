@@ -11,6 +11,7 @@ import { IncomeProjectionChart } from '../charts/IncomeProjectionChart';
 import { TSPBalanceChart } from '../charts/TSPBalanceChart';
 import { NetWorthChart } from '../charts/NetWorthChart';
 import { ExpensesChart } from '../charts/ExpensesChart';
+import { ProjectionTable } from './ProjectionTable';
 
 interface DashboardProps {
   scenario: Scenario;
@@ -311,55 +312,8 @@ export function Dashboard({
         </div>
       </Card>
 
-      {/* Income Projection Table (Detailed Data) */}
-      {projections.length > 0 && (
-        <Card className="p-6">
-          <h2 className="text-xl font-semibold mb-4">Detailed Year-by-Year Projection</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-2 px-2">Age</th>
-                  <th className="text-right py-2 px-2">Pension</th>
-                  <th className="text-right py-2 px-2">TSP</th>
-                  <th className="text-right py-2 px-2">Part-Time</th>
-                  <th className="text-right py-2 px-2">Soc. Sec.</th>
-                  <th className="text-right py-2 px-2">Total</th>
-                  <th className="text-right py-2 px-2">TSP Balance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {projections.filter((_, i) => i % 5 === 0).map((projection) => (
-                  <tr key={projection.age} className="border-b hover:bg-gray-50">
-                    <td className="py-2 px-2">{projection.age}</td>
-                    <td className="text-right py-2 px-2">
-                      {formatCurrency(projection.pension, 0)}
-                    </td>
-                    <td className="text-right py-2 px-2">
-                      {formatCurrency(projection.tspDistribution, 0)}
-                    </td>
-                    <td className="text-right py-2 px-2 text-green-600">
-                      {projection.otherIncome > 0 ? formatCurrency(projection.otherIncome, 0) : '—'}
-                    </td>
-                    <td className="text-right py-2 px-2">
-                      {formatCurrency(projection.socialSecurity, 0)}
-                    </td>
-                    <td className="text-right py-2 px-2 font-semibold">
-                      {formatCurrency(projection.totalIncome, 0)}
-                    </td>
-                    <td className="text-right py-2 px-2 text-muted-foreground">
-                      {formatCurrency(projection.tspBalance, 0)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="text-xs text-muted-foreground mt-4">
-            Showing projections every 5 years. Use the control panel to adjust assumptions.
-          </p>
-        </Card>
-      )}
+      {/* Detailed Year-by-Year Projection Table */}
+      <ProjectionTable projections={projections} />
     </div>
   );
 }
