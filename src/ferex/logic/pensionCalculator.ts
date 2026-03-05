@@ -6,6 +6,7 @@
 import type {
   UserProfile,
   ServicePeriod,
+  SpouseInfo,
   PensionBreakdown,
 } from '../types';
 import {
@@ -190,6 +191,35 @@ export function calculatePensionWithCOLA(
   colaRate: number
 ): number {
   return basePension * Math.pow(1 + colaRate / 100, yearsFromRetirement);
+}
+
+/**
+ * Calculate the spouse's own annual federal pension (before COLA).
+ * Used when the spouse is a federal employee with servicePeriods and high3Salary.
+ * No survivor benefit reduction is applied here — this is the spouse's own benefit.
+ */
+export function calculateSpouseAnnualPension(spouse: SpouseInfo): number {
+  if (!spouse.isFederalEmployee || !spouse.servicePeriods || !spouse.high3Salary) {
+    return 0;
+  }
+
+  const { fersYears, csrsYears } = calculateServiceBySystem(
+    spouse.servicePeriods,
+    spouse.sickLeaveHours || 0
+  );
+
+  if (fersYears === 0 && csrsYears === 0) return 0;
+
+  // Mixed service
+  if (fersYears > 0 && csrsYears > 0) {
+    return calculateMixedPension(spouse.high3Salary, spouse.servicePeriods, 'none');
+  }
+
+  if (csrsYears > 0) {
+    return calculateCSRSPension(spouse.high3Salary, csrsYears, 'none');
+  }
+
+  return calculateFERSPension(spouse.high3Salary, fersYears, 'none');
 }
 
 /**

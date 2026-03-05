@@ -24,6 +24,10 @@ export interface NonFederalEmploymentPeriod {
   annualSalary?: number;
   had401k?: boolean;
   annual401kContribution?: number;
+  employerMatch401kPercent?: number; // E.g., 4 for 4% employer match
+  currentBalance401k?: number; // Current value of this 401k (if not yet rolled over)
+  return401kAssumption?: number; // Annual growth rate % (defaults to TSP return rate if unset)
+  rolloverToTSP?: boolean; // If true, merge this 401k into TSP at the start of projections
   hadHealthInsurance?: boolean;
   isActive: boolean; // Currently employed here
   notes?: string;
@@ -36,14 +40,21 @@ export interface SpouseInfo {
   gender: Gender;
   // Additional planning fields
   currentIncome?: number; // Annual income
-  retirementAge?: number; // When spouse plans to retire (main retirement age)
+  retirementAge?: number; // When spouse plans to retire / claim pension
   leaveServiceAge?: number; // When spouse leaves their job (if different from retirement)
-  retirementIncome?: number; // Expected retirement income (pension, SS, etc.)
+  retirementIncome?: number; // Manual fallback: additional retirement income not auto-calculated
   // Federal employment tracking
   isFederalEmployee?: boolean; // Did/does spouse work for federal government?
+  retirementSystem?: RetirementSystem; // FERS or CSRS (auto-detected from servicePeriods if not set)
   servicePeriods?: ServicePeriod[]; // Federal service history
-  high3Salary?: number; // High-3 average salary
+  high3Salary?: number; // High-3 average salary for spouse pension calculation
   sickLeaveHours?: number; // Unused sick leave hours
+  // Spouse TSP
+  tspCurrentBalance?: number; // Current TSP balance for spouse
+  tspAnnualContribution?: number; // Annual employee TSP contribution while working
+  tspReturnAssumption?: number; // Expected annual return % (default 6.5%)
+  // Spouse Social Security
+  socialSecurityEstimate?: number; // Annual SS estimate from SSA.gov (at their full retirement age)
 }
 
 export interface HighThreeYears {
@@ -83,6 +94,7 @@ export interface EmploymentInfo {
   high3Override?: number; // If user wants to specify
   lastHighThreeYears?: HighThreeYears;
   sickLeaveHours?: number; // Unused sick leave hours (converts to service time)
+  socialSecurityEstimate?: number; // Annual SS estimate from SSA.gov (used for FERS Supplement and SS projection)
 }
 
 export interface RetirementInfo {
@@ -247,8 +259,15 @@ export interface ProjectionYear {
   tspDistribution: number;
   socialSecurity: number; // If applicable
   fersSupplement: number; // FERS Supplement (paid from retirement to age 62 for eligible FERS retirees)
-  otherIncome: number; // Part-time work, spouse income, etc.
-  spouseIncome: number; // Separate tracking for spouse income
+  otherIncome: number; // Part-time work, side hustle, etc.
+  spouseIncome: number; // Total spouse income (working income OR sum of pension+TSP+SS in retirement)
+  // Spouse income breakdown (auto-calculated when full spouse profile is provided)
+  spousePension?: number; // Spouse's federal pension (if applicable)
+  spouseTspDistribution?: number; // Spouse's TSP withdrawal
+  spouseSocialSecurity?: number; // Spouse's Social Security
+  spouseTspBalance?: number; // Spouse's remaining TSP balance
+  // Non-federal 401k tracking
+  nonFederal401kBalance?: number; // Accumulated 401k balance from non-federal employment periods
   fehbCost: number;
   totalIncome: number;
   expenses: number; // Total annual expenses

@@ -10,7 +10,7 @@ import type {
   PensionBreakdown,
 } from '../types';
 import { DEFAULT_LIFE_EXPECTANCY } from '../types';
-import { calculateAnnualPension, calculatePensionWithCOLA } from './pensionCalculator';
+import { calculateAnnualPension, calculatePensionWithCOLA, calculateSpouseAnnualPension } from './pensionCalculator';
 import { calculateTSPBalanceAfterYear, calculateTSPDistribution, calculateEmployerMatch } from './tspCalculator';
 import { calculateAnnualFEHBCost } from './fehbCalculator';
 import {
@@ -79,22 +79,24 @@ export function determineEligibility(profile: UserProfile): EligibilityInfo {
 }
 
 /**
- * Calculate Social Security estimate (rough)
- * This is a simplified estimate - actual SS calculations are complex
+ * Calculate Social Security benefit for a given age.
+ * Uses the user's actual SS estimate if provided; otherwise falls back to a rough approximation.
+ * Full retirement age is assumed to be 67. Early claiming (62) is not modeled.
  */
 function estimateSocialSecurity(
   high3: number,
-  age: number
+  age: number,
+  ssEstimate?: number
 ): number {
-  // Social Security starts at age 67 for most current workers
   if (age < 67) return 0;
 
-  // Very rough estimate: ~40% of average indexed earnings
-  // For federal employees, this is often lower due to WEP/GPO
-  // Using conservative estimate of 30% for FERS employees
+  // Use user-provided SS estimate (from SSA.gov) if available
+  if (ssEstimate && ssEstimate > 0) {
+    return ssEstimate;
+  }
 
-  const monthlyEstimate = (high3 / 12) * 0.30;
-  return monthlyEstimate * 12;
+  // Fallback: rough approximation (~30% of High-3 for FERS employees after WEP offset)
+  return high3 * 0.30;
 }
 
 /**
@@ -113,7 +115,8 @@ function calculateFERSSupplement(
   claimPensionAge: number,
   fersYears: number,
   totalYears: number,
-  detectedSystem: string
+  detectedSystem: string,
+  ssEstimate?: number
 ): number {
   // Only for FERS employees
   if (detectedSystem === 'CSRS') return 0;
@@ -126,10 +129,13 @@ function calculateFERSSupplement(
   const qualifiesForSupplement = totalYears >= 30 || (totalYears >= 20 && claimPensionAge <= 60);
   if (!qualifiesForSupplement) return 0;
 
-  // Estimate SS benefit at 62 (using same conservative 30% factor as SS estimate)
-  const estimatedSSAt62 = high3 * 0.30;
+  // Use user's actual SS estimate if provided; otherwise fall back to approximation.
+  // The supplement is designed to approximate the SS benefit earned during federal service.
+  // OPM uses the estimated SS at 62; if the user has a full-retirement-age estimate we use it directly
+  // as a close proxy (slightly conservative since 62 benefit would be ~70% of FRA benefit).
+  const estimatedSSAt62 = ssEstimate && ssEstimate > 0 ? ssEstimate : high3 * 0.30;
 
-  // Supplement = estimated SS × (federal years / 40 qualifying years)
+  // Supplement = estimated SS × (FERS years / 40 qualifying years)
   const supplementFraction = Math.min(fersYears / 40, 1);
   return estimatedSSAt62 * supplementFraction;
 }
@@ -166,8 +172,35 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
   );
   const supplementDetectedSystem = eligibilityForSupplement.detectedSystem;
 
-  // Initialize TSP balance
-  let tspBalance = profile.tsp.currentBalance;
+  // ── Non-federal 401k pre-computation ──────────────────────────────────────
+  // For each non-federal period that has a 401k balance:
+  //   - If rolloverToTSP === true  → add currentBalance401k to initial TSP balance
+  //   - Otherwise                  → track in a separate nonFederal401kBalance pool
+  const nonFederalPeriods = profile.employment.nonFederalPeriods || [];
+  let nonFederal401kRolloverToTSP = 0;
+  let nonFederal401kBalance = 0;
+
+  for (const period of nonFederalPeriods) {
+    const balance = period.currentBalance401k || 0;
+    if (balance <= 0) continue;
+    if (period.rolloverToTSP) {
+      nonFederal401kRolloverToTSP += balance;
+    } else {
+      nonFederal401kBalance += balance;
+    }
+  }
+
+  // Identify the single currently-active non-federal period (if any) for ongoing contributions
+  let activeNonFederalPeriod = null;
+  for (let i = 0; i < nonFederalPeriods.length; i++) {
+    if (nonFederalPeriods[i].isActive && nonFederalPeriods[i].had401k) {
+      activeNonFederalPeriod = nonFederalPeriods[i];
+      break;
+    }
+  }
+
+  // Initialize TSP balance (including any rolled-over non-federal 401k money)
+  let tspBalance = profile.tsp.currentBalance + nonFederal401kRolloverToTSP;
 
   // Initialize other investments tracking
   let otherInvestmentsBalance = profile.otherInvestments?.totalBalance || 0;
@@ -178,11 +211,18 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
   // Initialize assets (deep copy)
   const assets = (profile.planning?.assets || []).map(a => ({ ...a }));
 
-  // Spouse info
-  const spouseAge = profile.personal.spouseInfo ? currentAge + (profile.personal.spouseInfo.age - currentAge) : 0;
-  const spouseRetirementAge = profile.personal.spouseInfo?.retirementAge || 65;
-  const spouseCurrentIncome = profile.personal.spouseInfo?.currentIncome || 0;
-  const spouseRetirementIncome = profile.personal.spouseInfo?.retirementIncome || 0;
+  // ── Spouse pre-computation ─────────────────────────────────────────────────
+  const spouse = profile.personal.spouseInfo || null;
+  const spouseCurrentAge = spouse ? spouse.age : 0;
+  const spouseRetirementAge = spouse?.retirementAge || 65;
+  const spouseLeaveServiceAge = spouse?.leaveServiceAge || spouseRetirementAge;
+  const spouseCurrentIncome = spouse?.currentIncome || 0;
+
+  // Pre-calculate spouse's federal pension (if applicable) — base amount before COLA
+  const spouseBasePension = spouse ? calculateSpouseAnnualPension(spouse) : 0;
+
+  // Track spouse TSP balance throughout projection
+  let spouseTspBalance = spouse?.tspCurrentBalance || 0;
 
   // Annual living expenses (base amount in today's dollars)
   const baseLivingExpenses = profile.assumptions.annualLivingExpenses || 60000;
@@ -233,8 +273,9 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       );
     }
 
-    // Estimate Social Security
-    const socialSecurity = estimateSocialSecurity(pensionInfo.high3, age);
+    // Estimate Social Security (uses user's actual estimate if provided)
+    const userSSEstimate = profile.employment.socialSecurityEstimate;
+    const socialSecurity = estimateSocialSecurity(pensionInfo.high3, age, userSSEstimate);
 
     // Calculate FERS Supplement (paid between retirement and age 62 for eligible immediate annuitants)
     const fersSupplement = calculateFERSSupplement(
@@ -243,7 +284,8 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       claimPensionAge,
       fersYears,
       eligibilityForSupplement.totalYearsOfService,
-      supplementDetectedSystem
+      supplementDetectedSystem,
+      userSSEstimate
     );
 
     // Calculate FEHB cost (only after leaving service)
@@ -254,14 +296,75 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       profile.assumptions.healthcareInflation
     );
 
-    // Calculate spouse income
+    // ── Non-federal 401k growth + contributions ───────────────────────────────
+    // Grow the non-TSP 401k pool each year
+    const nonFed401kReturnRate = activeNonFederalPeriod?.return401kAssumption ?? profile.tsp.returnAssumption;
+    // Add contributions from an active non-federal period (while the user is in that job)
+    // We treat the non-federal period as active up until leaveServiceAge (when they return to federal)
+    if (activeNonFederalPeriod && age < leaveServiceAge) {
+      const annualContrib = activeNonFederalPeriod.annual401kContribution || 0;
+      const salary = activeNonFederalPeriod.annualSalary || 0;
+      const matchPct = activeNonFederalPeriod.employerMatch401kPercent || 0;
+      const employerMatchAmt = salary * (matchPct / 100);
+      nonFederal401kBalance += annualContrib + employerMatchAmt;
+    }
+    nonFederal401kBalance *= (1 + nonFed401kReturnRate / 100);
+
+    // ── Full spouse income modeling ───────────────────────────────────────────
     let spouseIncome = 0;
-    if (profile.personal.spouseInfo) {
-      const currentSpouseAge = spouseAge + (age - currentAge);
-      if (currentSpouseAge < spouseRetirementAge) {
+    let spousePension = 0;
+    let spouseTspDistribution = 0;
+    let spouseSocialSecurity = 0;
+
+    if (spouse) {
+      const currentSpouseAge = spouseCurrentAge + (age - currentAge);
+      const spouseStillWorking = currentSpouseAge < spouseLeaveServiceAge;
+      const spouseHasClaimed = currentSpouseAge >= spouseRetirementAge;
+
+      if (spouseStillWorking) {
+        // Spouse is still working — accumulate TSP contributions
+        const spouseTspContrib = spouse.tspAnnualContribution || 0;
+        spouseTspBalance += spouseTspContrib;
+        spouseTspBalance *= (1 + (spouse.tspReturnAssumption ?? 6.5) / 100);
+
         spouseIncome = spouseCurrentIncome;
       } else {
-        spouseIncome = spouseRetirementIncome;
+        // Spouse has left employment — grow or draw down TSP
+        const canAccessSpouseTSP = currentSpouseAge >= 59.5 ||
+          (spouseLeaveServiceAge >= 55 && currentSpouseAge >= spouseLeaveServiceAge);
+
+        if (canAccessSpouseTSP) {
+          spouseTspDistribution = spouseTspBalance * (drawdownRate / 100);
+          spouseTspBalance = (spouseTspBalance - spouseTspDistribution) *
+            (1 + (spouse.tspReturnAssumption ?? 6.5) / 100);
+        } else {
+          spouseTspBalance *= (1 + (spouse.tspReturnAssumption ?? 6.5) / 100);
+        }
+
+        // Spouse federal pension (with COLA from the year they claimed)
+        if (spouseHasClaimed && spouseBasePension > 0) {
+          const yearsFromSpouseClaim = currentSpouseAge - spouseRetirementAge;
+          spousePension = calculatePensionWithCOLA(
+            spouseBasePension,
+            Math.max(0, yearsFromSpouseClaim),
+            profile.assumptions.colaRate
+          );
+        }
+
+        // Spouse Social Security (at age 67)
+        if (currentSpouseAge >= 67) {
+          if (spouse.socialSecurityEstimate && spouse.socialSecurityEstimate > 0) {
+            spouseSocialSecurity = spouse.socialSecurityEstimate;
+          } else if (spouse.currentIncome) {
+            // Rough fallback: ~35% of working income as SS estimate
+            spouseSocialSecurity = spouse.currentIncome * 0.35;
+          }
+        }
+
+        // Total spouse retirement income: auto-calculated pension + TSP + SS,
+        // plus any manually specified additional retirement income
+        const manualExtra = spouse.retirementIncome || 0;
+        spouseIncome = spousePension + spouseTspDistribution + spouseSocialSecurity + manualExtra;
       }
     }
 
@@ -369,9 +472,9 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     const estimatedTaxes = totalIncome * 0.15;
     const netIncome = totalIncome - totalExpenses - estimatedTaxes;
 
-    // Calculate net worth
-    const netWorth = tspBalance + otherInvestmentsBalance + totalAssetValue - totalDebt;
-    const liquidNetWorth = tspBalance + otherInvestmentsBalance - totalDebt;
+    // Calculate net worth (includes spouse TSP and non-federal 401k in household wealth)
+    const netWorth = tspBalance + otherInvestmentsBalance + spouseTspBalance + nonFederal401kBalance + totalAssetValue - totalDebt;
+    const liquidNetWorth = tspBalance + otherInvestmentsBalance + spouseTspBalance + nonFederal401kBalance - totalDebt;
 
     // Cumulative savings
     cumulativeSavings += netIncome;
@@ -385,6 +488,11 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       fersSupplement,
       otherIncome,
       spouseIncome,
+      spousePension,
+      spouseTspDistribution,
+      spouseSocialSecurity,
+      spouseTspBalance: Math.max(0, spouseTspBalance),
+      nonFederal401kBalance: Math.max(0, nonFederal401kBalance),
       fehbCost,
       totalIncome,
       expenses: totalExpenses,
