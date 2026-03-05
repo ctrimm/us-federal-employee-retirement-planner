@@ -11,6 +11,7 @@ import type {
 } from '../types';
 import {
   FERS_ACCRUAL_RATE,
+  FERS_ENHANCED_ACCRUAL_RATE,
   CSRS_ACCRUAL_RATES,
   SURVIVOR_ANNUITY_REDUCTION,
 } from '../types';
@@ -37,15 +38,20 @@ export function calculateHigh3(profile: UserProfile): number {
 }
 
 /**
- * Calculate FERS annual pension
+ * Calculate FERS annual pension.
+ * Enhanced 1.1% accrual applies when retiring at age 62+ with at least 20 years of service.
  */
 export function calculateFERSPension(
   high3: number,
   yearsOfService: number,
-  survivorAnnuityType: string
+  survivorAnnuityType: string,
+  retirementAge?: number
 ): number {
-  // Basic FERS calculation: 1% × High-3 × Years
-  let annualPension = high3 * FERS_ACCRUAL_RATE * yearsOfService;
+  // Use 1.1% enhanced rate if retiring at 62+ with 20+ years; otherwise standard 1%
+  const useEnhanced = retirementAge !== undefined && retirementAge >= 62 && yearsOfService >= 20;
+  const accrualRate = useEnhanced ? FERS_ENHANCED_ACCRUAL_RATE : FERS_ACCRUAL_RATE;
+
+  let annualPension = high3 * accrualRate * yearsOfService;
 
   // Apply survivor annuity reduction if elected
   if (survivorAnnuityType === 'standard' || survivorAnnuityType === 'courtOrdered') {
@@ -101,15 +107,16 @@ export function calculateCSRSPension(
 export function calculateMixedPension(
   high3: number,
   servicePeriods: ServicePeriod[],
-  survivorAnnuityType: string
+  survivorAnnuityType: string,
+  retirementAge?: number
 ): number {
   const { fersYears, csrsYears } = calculateServiceBySystem(servicePeriods);
 
   let totalPension = 0;
 
-  // Calculate FERS portion
+  // Calculate FERS portion (enhanced rate applies only to FERS years portion)
   if (fersYears > 0) {
-    totalPension += calculateFERSPension(high3, fersYears, 'none');
+    totalPension += calculateFERSPension(high3, fersYears, 'none', retirementAge);
   }
 
   // Calculate CSRS portion
@@ -136,6 +143,9 @@ export function calculateAnnualPension(profile: UserProfile): PensionBreakdown {
     profile.employment.sickLeaveHours || 0
   );
 
+  // Retirement age is used to determine whether the 1.1% enhanced FERS accrual applies
+  const retirementAge = profile.retirement.intendedRetirementAge || profile.retirement.leaveServiceAge;
+
   let annualPension: number;
   let accrualRate: number;
 
@@ -145,7 +155,8 @@ export function calculateAnnualPension(profile: UserProfile): PensionBreakdown {
     annualPension = calculateMixedPension(
       high3,
       profile.employment.servicePeriods,
-      profile.retirement.survivorAnnuityType
+      profile.retirement.survivorAnnuityType,
+      retirementAge
     );
     accrualRate = annualPension / (high3 * totalYears); // Effective rate
   } else if (csrsYears > 0) {
@@ -161,9 +172,11 @@ export function calculateAnnualPension(profile: UserProfile): PensionBreakdown {
     annualPension = calculateFERSPension(
       high3,
       fersYears,
-      profile.retirement.survivorAnnuityType
+      profile.retirement.survivorAnnuityType,
+      retirementAge
     );
-    accrualRate = FERS_ACCRUAL_RATE;
+    const useEnhanced = retirementAge !== undefined && retirementAge >= 62 && fersYears >= 20;
+    accrualRate = useEnhanced ? FERS_ENHANCED_ACCRUAL_RATE : FERS_ACCRUAL_RATE;
   }
 
   // Calculate survivor reduction amount
@@ -210,16 +223,18 @@ export function calculateSpouseAnnualPension(spouse: SpouseInfo): number {
 
   if (fersYears === 0 && csrsYears === 0) return 0;
 
+  const spouseRetAge = spouse.retirementAge;
+
   // Mixed service
   if (fersYears > 0 && csrsYears > 0) {
-    return calculateMixedPension(spouse.high3Salary, spouse.servicePeriods, 'none');
+    return calculateMixedPension(spouse.high3Salary, spouse.servicePeriods, 'none', spouseRetAge);
   }
 
   if (csrsYears > 0) {
     return calculateCSRSPension(spouse.high3Salary, csrsYears, 'none');
   }
 
-  return calculateFERSPension(spouse.high3Salary, fersYears, 'none');
+  return calculateFERSPension(spouse.high3Salary, fersYears, 'none', spouseRetAge);
 }
 
 /**

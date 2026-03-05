@@ -21,6 +21,8 @@ import {
   isFEHBEligible,
   calculateServiceBySystem,
 } from './systemDetection';
+import { calculateRetirementTax } from './taxCalculator';
+import type { FilingStatus } from './taxCalculator';
 
 /**
  * Determine eligibility information for a user profile
@@ -467,10 +469,25 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     // Total income (pension + TSP + Social Security + FERS Supplement + other sources)
     const totalIncome = pension + tspDistribution + socialSecurity + fersSupplement + spouseIncome + otherIncome;
 
-    // Net income (after expenses and taxes)
-    // Rough tax estimate: 15% effective rate
-    const estimatedTaxes = totalIncome * 0.15;
-    const netIncome = totalIncome - totalExpenses - estimatedTaxes;
+    // Net income (after expenses and taxes) — progressive federal + optional state tax
+    const filingStatus: FilingStatus = spouse ? 'married' : 'single';
+    const spouseAgeThisYear = spouse ? spouseCurrentAge + (age - currentAge) : undefined;
+    // Ordinary income: pension, FERS supplement, TSP distributions (all taxed as ordinary income)
+    // Spouse working income is ordinary income; spouse pension/TSP also ordinary
+    const ordinaryIncome = pension + fersSupplement + tspDistribution +
+      spousePension + spouseTspDistribution +
+      (spouse && spouseCurrentAge + (age - currentAge) < spouseLeaveServiceAge ? spouseCurrentIncome : 0) +
+      (spouse?.retirementIncome || 0);
+    const totalSSIncome = socialSecurity + spouseSocialSecurity;
+    const taxResult = calculateRetirementTax({
+      ordinaryIncome: Math.max(0, ordinaryIncome),
+      socialSecurityIncome: Math.max(0, totalSSIncome),
+      filingStatus,
+      primaryAge: age,
+      spouseAge: spouseAgeThisYear,
+      stateTaxRate: profile.assumptions.stateTaxRate,
+    });
+    const netIncome = totalIncome - totalExpenses - taxResult.totalTax;
 
     // Calculate net worth (includes spouse TSP and non-federal 401k in household wealth)
     const netWorth = tspBalance + otherInvestmentsBalance + spouseTspBalance + nonFederal401kBalance + totalAssetValue - totalDebt;
@@ -495,6 +512,10 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       nonFederal401kBalance: Math.max(0, nonFederal401kBalance),
       fehbCost,
       totalIncome,
+      federalTax: taxResult.federalTax,
+      stateTax: taxResult.stateTax,
+      totalTax: taxResult.totalTax,
+      effectiveTaxRate: taxResult.effectiveRate,
       expenses: totalExpenses,
       collegeCosts,
       netIncome,

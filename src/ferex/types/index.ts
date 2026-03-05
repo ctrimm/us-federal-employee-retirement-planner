@@ -154,6 +154,7 @@ export interface AssumptionsInfo {
   annualLivingExpenses?: number; // Expected annual expenses in retirement
   applyExpensesFromCurrentAge?: boolean; // Start expenses at current age instead of retirement
   expenseInflationRate?: number; // Rate to inflate expenses (defaults to inflationRate)
+  stateTaxRate?: number; // Optional flat state income tax rate (e.g. 5 for 5%)
 }
 
 // Life Events & Milestones
@@ -270,6 +271,11 @@ export interface ProjectionYear {
   nonFederal401kBalance?: number; // Accumulated 401k balance from non-federal employment periods
   fehbCost: number;
   totalIncome: number;
+  // Tax breakdown
+  federalTax?: number;
+  stateTax?: number;
+  totalTax?: number;
+  effectiveTaxRate?: number;
   expenses: number; // Total annual expenses
   collegeCosts: number; // Annual college costs for children (subset of expenses)
   netIncome: number; // After FEHB, expenses, estimated taxes
@@ -337,7 +343,8 @@ export const DEFAULT_TSP: Partial<TSPInfo> = {
 export const DEFAULT_LIFE_EXPECTANCY = 85; // Average life expectancy
 
 // FERS and CSRS constants
-export const FERS_ACCRUAL_RATE = 0.01; // 1% per year
+export const FERS_ACCRUAL_RATE = 0.01; // 1% per year (standard)
+export const FERS_ENHANCED_ACCRUAL_RATE = 0.011; // 1.1% per year (age 62+ with 20+ years)
 export const FERS_SUPPLEMENT_AGE = 62;
 
 export const CSRS_ACCRUAL_RATES = {
