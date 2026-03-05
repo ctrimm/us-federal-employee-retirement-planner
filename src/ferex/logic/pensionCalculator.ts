@@ -14,8 +14,9 @@ import {
   FERS_ENHANCED_ACCRUAL_RATE,
   CSRS_ACCRUAL_RATES,
   SURVIVOR_ANNUITY_REDUCTION,
+  MRA_10_ANNUAL_REDUCTION,
 } from '../types';
-import { calculateServiceBySystem, detectRetirementSystem } from './systemDetection';
+import { calculateServiceBySystem, detectRetirementSystem, calculateMRA } from './systemDetection';
 
 /**
  * Calculate High-3 average salary
@@ -179,6 +180,23 @@ export function calculateAnnualPension(profile: UserProfile): PensionBreakdown {
     accrualRate = useEnhanced ? FERS_ENHANCED_ACCRUAL_RATE : FERS_ACCRUAL_RATE;
   }
 
+  // ── MRA+10 early retirement reduction (FERS only) ─────────────────────────
+  // Applies when a FERS employee retires at MRA with 10–29 creditable years
+  // and claims the annuity before age 62.  Reduction = 5% per year under 62.
+  // NOT applied for immediate full annuity (30+ yrs at MRA, or 20+ yrs at 60).
+  let mra10ReductionPercent = 0;
+  if (fersYears > 0 && retirementAge !== undefined) {
+    const leaveAge = profile.retirement.leaveServiceAge ?? retirementAge;
+    const mra = calculateMRA(profile.personal.birthYear);
+    const isImmediateFullAnnuity = fersYears >= 30 || (fersYears >= 20 && leaveAge >= 60);
+    const isMRA10 = !isImmediateFullAnnuity && fersYears >= 10 && leaveAge >= mra && leaveAge < 62;
+
+    if (isMRA10 && retirementAge < 62) {
+      mra10ReductionPercent = Math.min((62 - retirementAge) * MRA_10_ANNUAL_REDUCTION, 1.0);
+      annualPension *= (1 - mra10ReductionPercent);
+    }
+  }
+
   // Calculate survivor reduction amount
   const survivorReduction =
     profile.retirement.survivorAnnuityType !== 'none'
@@ -192,6 +210,7 @@ export function calculateAnnualPension(profile: UserProfile): PensionBreakdown {
     survivorReduction,
     annualPension,
     monthlyPension: annualPension / 12,
+    mra10ReductionPercent: mra10ReductionPercent > 0 ? mra10ReductionPercent : undefined,
   };
 }
 

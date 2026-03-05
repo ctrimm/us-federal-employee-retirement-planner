@@ -95,6 +95,7 @@ export interface EmploymentInfo {
   lastHighThreeYears?: HighThreeYears;
   sickLeaveHours?: number; // Unused sick leave hours (converts to service time)
   socialSecurityEstimate?: number; // Annual SS estimate from SSA.gov (used for FERS Supplement and SS projection)
+  wepMonthlyReduction?: number; // WEP reduction in $/month from SSA notice (only used when no ssEstimate provided)
 }
 
 export interface RetirementInfo {
@@ -270,6 +271,7 @@ export interface ProjectionYear {
   // Non-federal 401k tracking
   nonFederal401kBalance?: number; // Accumulated 401k balance from non-federal employment periods
   fehbCost: number;
+  medicarePremium?: number; // Medicare Part B premium for primary and/or spouse at 65+
   totalIncome: number;
   // Tax breakdown
   federalTax?: number;
@@ -323,6 +325,7 @@ export interface PensionBreakdown {
   survivorReduction: number;
   annualPension: number;
   monthlyPension: number;
+  mra10ReductionPercent?: number; // MRA+10 early-retirement reduction applied (e.g. 0.25 = 25%)
 }
 
 // Default values for new profiles
@@ -346,6 +349,8 @@ export const DEFAULT_LIFE_EXPECTANCY = 85; // Average life expectancy
 export const FERS_ACCRUAL_RATE = 0.01; // 1% per year (standard)
 export const FERS_ENHANCED_ACCRUAL_RATE = 0.011; // 1.1% per year (age 62+ with 20+ years)
 export const FERS_SUPPLEMENT_AGE = 62;
+export const MRA_10_ANNUAL_REDUCTION = 0.05; // 5% per year under 62 for MRA+10 retirees
+export const MEDICARE_PART_B_MONTHLY_2024 = 174.70; // Standard Part B premium; grows with healthcareInflation
 
 export const CSRS_ACCRUAL_RATES = {
   first5Years: 0.015, // 1.5%

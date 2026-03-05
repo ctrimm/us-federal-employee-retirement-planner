@@ -23,6 +23,7 @@ import {
 } from './systemDetection';
 import { calculateRetirementTax } from './taxCalculator';
 import type { FilingStatus } from './taxCalculator';
+import { MEDICARE_PART_B_MONTHLY_2024 } from '../types';
 
 /**
  * Determine eligibility information for a user profile
@@ -82,23 +83,27 @@ export function determineEligibility(profile: UserProfile): EligibilityInfo {
 
 /**
  * Calculate Social Security benefit for a given age.
- * Uses the user's actual SS estimate if provided; otherwise falls back to a rough approximation.
- * Full retirement age is assumed to be 67. Early claiming (62) is not modeled.
+ * Uses the user's actual SS estimate if provided (WEP already reflected by SSA).
+ * Falls back to a rough approximation with optional WEP reduction applied.
+ * Full retirement age is assumed to be 67. Early claiming is not modeled.
  */
 function estimateSocialSecurity(
   high3: number,
   age: number,
-  ssEstimate?: number
+  ssEstimate?: number,
+  wepMonthlyReduction?: number
 ): number {
   if (age < 67) return 0;
 
-  // Use user-provided SS estimate (from SSA.gov) if available
   if (ssEstimate && ssEstimate > 0) {
+    // User-provided estimate from SSA.gov already includes WEP; use as-is.
     return ssEstimate;
   }
 
-  // Fallback: rough approximation (~30% of High-3 for FERS employees after WEP offset)
-  return high3 * 0.30;
+  // Fallback approximation — apply WEP reduction only here (not on user-provided estimates)
+  const rawEstimate = high3 * 0.30;
+  const annualWEP = (wepMonthlyReduction || 0) * 12;
+  return Math.max(0, rawEstimate - annualWEP);
 }
 
 /**
@@ -275,9 +280,11 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       );
     }
 
-    // Estimate Social Security (uses user's actual estimate if provided)
+    // Estimate Social Security (uses user's actual estimate if provided; WEP applied to fallback only)
     const userSSEstimate = profile.employment.socialSecurityEstimate;
-    const socialSecurity = estimateSocialSecurity(pensionInfo.high3, age, userSSEstimate);
+    const socialSecurity = estimateSocialSecurity(
+      pensionInfo.high3, age, userSSEstimate, profile.employment.wepMonthlyReduction
+    );
 
     // Calculate FERS Supplement (paid between retirement and age 62 for eligible immediate annuitants)
     const fersSupplement = calculateFERSSupplement(
@@ -297,6 +304,26 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       Math.max(0, age - leaveServiceAge),
       profile.assumptions.healthcareInflation
     );
+
+    // Medicare Part B premium — added at 65+ for primary and/or spouse.
+    // Standard 2024 premium grows at healthcareInflation rate each year.
+    // If a user-provided SS estimate is from SSA.gov it is already WEP-adjusted;
+    // Part B is a separate out-of-pocket cost on top of FEHB.
+    let medicarePremium = 0;
+    const medicareAnnualBase = MEDICARE_PART_B_MONTHLY_2024 * 12;
+    if (age >= 65) {
+      const yearsOnMedicare = age - 65;
+      medicarePremium += medicareAnnualBase *
+        Math.pow(1 + profile.assumptions.healthcareInflation / 100, yearsOnMedicare);
+    }
+    if (spouse) {
+      const currentSpouseAgeThisYear = spouseCurrentAge + (age - currentAge);
+      if (currentSpouseAgeThisYear >= 65) {
+        const spouseMedicareYears = currentSpouseAgeThisYear - 65;
+        medicarePremium += medicareAnnualBase *
+          Math.pow(1 + profile.assumptions.healthcareInflation / 100, spouseMedicareYears);
+      }
+    }
 
     // ── Non-federal 401k growth + contributions ───────────────────────────────
     // Grow the non-TSP 401k pool each year
@@ -414,7 +441,9 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     // If applyExpensesFromCurrentAge is enabled, expenses start immediately
     // Otherwise, expenses only apply after leaving service
     const shouldApplyExpenses = applyExpensesFromCurrentAge || !stillWorking;
+    // Medicare Part B applies regardless of working status once eligible at 65+
     let totalExpenses = shouldApplyExpenses ? (inflatedLivingExpenses + fehbCost) : 0;
+    totalExpenses += medicarePremium;
 
     // Calculate college costs for children (tracked separately for visibility)
     let collegeCosts = 0;
@@ -511,6 +540,7 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       spouseTspBalance: Math.max(0, spouseTspBalance),
       nonFederal401kBalance: Math.max(0, nonFederal401kBalance),
       fehbCost,
+      medicarePremium,
       totalIncome,
       federalTax: taxResult.federalTax,
       stateTax: taxResult.stateTax,
