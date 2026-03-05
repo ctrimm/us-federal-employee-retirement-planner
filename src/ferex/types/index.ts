@@ -246,6 +246,7 @@ export interface ProjectionYear {
   pension: number; // Annual
   tspDistribution: number;
   socialSecurity: number; // If applicable
+  fersSupplement: number; // FERS Supplement (paid from retirement to age 62 for eligible FERS retirees)
   otherIncome: number; // Part-time work, spouse income, etc.
   spouseIncome: number; // Separate tracking for spouse income
   fehbCost: number;
@@ -331,18 +332,5 @@ export const SURVIVOR_ANNUITY_REDUCTION = {
   courtOrdered: 0.10, // Varies but ~10% typical
 };
 
-export const MRA_BY_BIRTH_YEAR: Record<string, number> = {
-  '<1948': 55,
-  '1948': 55,
-  '1949': 55,
-  '1950': 55,
-  '1951': 55,
-  '1952': 55,
-  '1953-1964': 56,
-  '1965': 56,
-  '1966': 56,
-  '1967': 56,
-  '1968': 56,
-  '1969': 56,
-  '1970+': 57,
-};
+// MRA is calculated dynamically by calculateMRA() in systemDetection.ts
+// Birth years before 1953 → MRA 55, 1953–1964 → MRA 56, 1965+ → MRA 57

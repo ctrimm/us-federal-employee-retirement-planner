@@ -59,15 +59,12 @@ export function FerexApp() {
   };
 
   const handleStartNew = (mode: OnboardingMode = 'express') => {
-    console.log('[FerexApp] handleStartNew called with mode:', mode);
     setSavedScenario(null);
     setOnboardingMode(mode);
     setView('onboarding');
-    console.log('[FerexApp] Onboarding mode set to:', mode);
   };
 
   const handleUpdateProfile = (updates: Partial<UserProfile>) => {
-    console.log('[FerexApp] handleUpdateProfile called', Object.keys(updates));
     // Hook handles all the deep merging and state updates
     updateProfile(updates);
   };
@@ -76,7 +73,6 @@ export function FerexApp() {
   // This runs AFTER the hook has updated the scenario state
   useEffect(() => {
     if (scenario) {
-      console.log('[FerexApp] Syncing scenario to localStorage', scenario.id);
       setSavedScenario(scenario);
     }
   }, [scenario, setSavedScenario]);
@@ -203,26 +199,19 @@ export function FerexApp() {
 
   // Onboarding View
   if (view === 'onboarding') {
-    console.log('[FerexApp] Rendering onboarding view, mode:', onboardingMode);
     return (
       <ErrorBoundary>
         <div className="min-h-screen bg-gray-50 py-8">
           {onboardingMode === 'express' ? (
-            <>
-              {console.log('[FerexApp] Rendering ExpressOnboarding')}
-              <ExpressOnboarding
-                onComplete={handleOnboardingComplete}
-                onCancel={() => setView('landing')}
-              />
-            </>
+            <ExpressOnboarding
+              onComplete={handleOnboardingComplete}
+              onCancel={() => setView('landing')}
+            />
           ) : (
-            <>
-              {console.log('[FerexApp] Rendering ComprehensiveOnboarding')}
-              <ComprehensiveOnboarding
-                onComplete={handleOnboardingComplete}
-                onCancel={() => setView('landing')}
-              />
-            </>
+            <ComprehensiveOnboarding
+              onComplete={handleOnboardingComplete}
+              onCancel={() => setView('landing')}
+            />
           )}
         </div>
       </ErrorBoundary>

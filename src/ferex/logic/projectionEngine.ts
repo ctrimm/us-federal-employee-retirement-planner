@@ -11,7 +11,7 @@ import type {
 } from '../types';
 import { DEFAULT_LIFE_EXPECTANCY } from '../types';
 import { calculateAnnualPension, calculatePensionWithCOLA } from './pensionCalculator';
-import { calculateTSPBalanceAfterYear, calculateTSPDistribution } from './tspCalculator';
+import { calculateTSPBalanceAfterYear, calculateTSPDistribution, calculateEmployerMatch } from './tspCalculator';
 import { calculateAnnualFEHBCost } from './fehbCalculator';
 import {
   calculateTotalService,
@@ -98,6 +98,43 @@ function estimateSocialSecurity(
 }
 
 /**
+ * Calculate FERS Supplement (approximate)
+ * Paid by OPM to eligible FERS retirees between retirement and age 62.
+ * Approximates the Social Security benefit earned during federal service.
+ *
+ * Eligibility: Immediate annuity with 30+ years at MRA, or 20+ years at age 60.
+ * NOT available for MRA+10 (deferred/reduced) retirements.
+ *
+ * Formula (simplified): estimated_SS_at_62 × (FERS_years / 40)
+ */
+function calculateFERSSupplement(
+  high3: number,
+  age: number,
+  claimPensionAge: number,
+  fersYears: number,
+  totalYears: number,
+  detectedSystem: string
+): number {
+  // Only for FERS employees
+  if (detectedSystem === 'CSRS') return 0;
+
+  // Only paid between retirement and age 62
+  if (age < claimPensionAge || age >= 62) return 0;
+
+  // Only for immediate full annuity (30+ years at MRA, or 20+ years at age 60)
+  // MRA+10 retirements do NOT qualify
+  const qualifiesForSupplement = totalYears >= 30 || (totalYears >= 20 && claimPensionAge <= 60);
+  if (!qualifiesForSupplement) return 0;
+
+  // Estimate SS benefit at 62 (using same conservative 30% factor as SS estimate)
+  const estimatedSSAt62 = high3 * 0.30;
+
+  // Supplement = estimated SS × (federal years / 40 qualifying years)
+  const supplementFraction = Math.min(fersYears / 40, 1);
+  return estimatedSSAt62 * supplementFraction;
+}
+
+/**
  * Generate year-by-year retirement projections
  */
 export function generateProjections(profile: UserProfile): ProjectionYear[] {
@@ -120,6 +157,14 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
   // Calculate base pension (will only apply from claimPensionAge)
   const pensionInfo = calculateAnnualPension(profile);
   const basePension = pensionInfo.annualPension;
+
+  // Pre-compute FERS supplement eligibility data
+  const eligibilityForSupplement = determineEligibility(profile);
+  const { fersYears } = calculateServiceBySystem(
+    profile.employment.servicePeriods,
+    profile.employment.sickLeaveHours || 0
+  );
+  const supplementDetectedSystem = eligibilityForSupplement.detectedSystem;
 
   // Initialize TSP balance
   let tspBalance = profile.tsp.currentBalance;
@@ -156,9 +201,12 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     const hasPension = age >= claimPensionAge;
     const yearsFromPension = age - claimPensionAge;
 
-    // TSP contributions while still working
-    if (stillWorking && age < leaveServiceAge) {
-      tspBalance += profile.tsp.annualContribution;
+    // TSP contributions while still working (employee + employer match for FERS)
+    if (stillWorking) {
+      const salary = profile.employment.currentOrLastSalary;
+      const employeeContributionPercent = profile.tsp.contributionPercent || 0;
+      const employerMatch = calculateEmployerMatch(salary, employeeContributionPercent);
+      tspBalance += profile.tsp.annualContribution + employerMatch;
       tspBalance *= (1 + profile.tsp.returnAssumption / 100);
     }
 
@@ -187,6 +235,16 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
 
     // Estimate Social Security
     const socialSecurity = estimateSocialSecurity(pensionInfo.high3, age);
+
+    // Calculate FERS Supplement (paid between retirement and age 62 for eligible immediate annuitants)
+    const fersSupplement = calculateFERSSupplement(
+      pensionInfo.high3,
+      age,
+      claimPensionAge,
+      fersYears,
+      eligibilityForSupplement.totalYearsOfService,
+      supplementDetectedSystem
+    );
 
     // Calculate FEHB cost (only after leaving service)
     const fehbCost = stillWorking ? 0 : calculateAnnualFEHBCost(
@@ -228,12 +286,20 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       otherIncome += profile.retirement.sideHustleIncome;
     }
 
-    // Calculate other investments growth
-    const otherAccountsGrowth = (profile.otherInvestments?.accounts || []).reduce((total, account) => {
-      return total + (otherInvestmentsBalance * (account.returnAssumption || 6.5) / 100);
-    }, 0) / Math.max(1, (profile.otherInvestments?.accounts || []).length);
-
-    otherInvestmentsBalance = otherInvestmentsBalance * (1 + (otherAccountsGrowth / otherInvestmentsBalance || 0));
+    // Calculate other investments growth using weighted-average return rate + annual contributions
+    const otherAccounts = profile.otherInvestments?.accounts || [];
+    const otherAnnualContributions = otherAccounts.reduce((sum, account) => sum + (account.annualContribution || 0), 0);
+    let weightedReturnRate: number;
+    if (otherAccounts.length === 0 || otherInvestmentsBalance === 0) {
+      weightedReturnRate = 0.065; // Default 6.5%
+    } else {
+      const totalAccountBalances = otherAccounts.reduce((sum, a) => sum + a.currentBalance, 0) || otherInvestmentsBalance;
+      weightedReturnRate = otherAccounts.reduce((rate, account) => {
+        const weight = totalAccountBalances > 0 ? account.currentBalance / totalAccountBalances : 1 / otherAccounts.length;
+        return rate + weight * ((account.returnAssumption || 6.5) / 100);
+      }, 0);
+    }
+    otherInvestmentsBalance = (otherInvestmentsBalance + otherAnnualContributions) * (1 + weightedReturnRate);
 
     // Calculate inflated living expenses for this year
     const yearsFromStart = age - startAge;
@@ -295,8 +361,8 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     // Calculate total debt
     const totalDebt = debts.reduce((sum, d) => sum + d.currentBalance, 0);
 
-    // Total income
-    const totalIncome = pension + tspDistribution + socialSecurity + spouseIncome + otherIncome;
+    // Total income (pension + TSP + Social Security + FERS Supplement + other sources)
+    const totalIncome = pension + tspDistribution + socialSecurity + fersSupplement + spouseIncome + otherIncome;
 
     // Net income (after expenses and taxes)
     // Rough tax estimate: 15% effective rate
@@ -316,6 +382,7 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       pension,
       tspDistribution,
       socialSecurity,
+      fersSupplement,
       otherIncome,
       spouseIncome,
       fehbCost,
