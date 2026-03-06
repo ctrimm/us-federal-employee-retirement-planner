@@ -23,7 +23,7 @@ import {
 } from './systemDetection';
 import { calculateRetirementTax } from './taxCalculator';
 import type { FilingStatus } from './taxCalculator';
-import { MEDICARE_PART_B_MONTHLY_2024 } from '../types';
+import { MEDICARE_PART_B_MONTHLY_2024, LEAN_FIRE_MULTIPLIER, FAT_FIRE_MULTIPLIER } from '../types';
 
 /**
  * Determine eligibility information for a user profile
@@ -206,8 +206,13 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     }
   }
 
-  // Initialize TSP balance (including any rolled-over non-federal 401k money)
-  let tspBalance = profile.tsp.currentBalance + nonFederal401kRolloverToTSP;
+  // ── TSP initialization (Traditional + Roth split) ─────────────────────────
+  // Non-federal 401k rollovers are treated as Traditional (pre-tax).
+  const rothStart = Math.min(profile.tsp.rothBalance || 0, profile.tsp.currentBalance);
+  let tspTradBalance = (profile.tsp.currentBalance - rothStart) + nonFederal401kRolloverToTSP;
+  let tspRothBalance = rothStart;
+  // tspBalance is always the sum of both for backward-compatible output fields
+  let tspBalance = tspTradBalance + tspRothBalance;
 
   // Initialize other investments tracking
   let otherInvestmentsBalance = profile.otherInvestments?.totalBalance || 0;
@@ -236,8 +241,29 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
   const applyExpensesFromCurrentAge = profile.assumptions.applyExpensesFromCurrentAge || false;
   const expenseInflationRate = profile.assumptions.expenseInflationRate || profile.assumptions.inflationRate;
 
-  // Determine TSP drawdown rate
+  // Base TSP drawdown rate (may be adjusted per-year by guardrails strategy)
   const drawdownRate = profile.assumptions.tspDrawdownRate || 4;
+
+  // ── CoastFIRE pre-computation ──────────────────────────────────────────────
+  // Estimate the pension-adjusted FIRE number at the planned retirement age so
+  // we can discount it back to compute a CoastFIRE target for each projection year.
+  const yearsUntilRetirement = Math.max(0, claimPensionAge - currentAge);
+  const expensesAtRetirement = baseLivingExpenses *
+    Math.pow(1 + expenseInflationRate / 100, yearsUntilRetirement);
+  const userSSEstimateForCoast = profile.employment.socialSecurityEstimate;
+  const guaranteedAtRetirement = basePension +
+    (claimPensionAge >= 67 ? (userSSEstimateForCoast || pensionInfo.high3 * 0.30) : 0);
+  const incomeGapAtRetirement = Math.max(0, expensesAtRetirement - guaranteedAtRetirement);
+  const fireTargetAtRetirement = incomeGapAtRetirement / (drawdownRate / 100);
+
+  // ── Guardrails & FI state ─────────────────────────────────────────────────
+  let retirementPortfolioBase = 0; // Set at the moment of retirement for guardrails reference
+  let fiAchieved = false;          // Latched once FI is reached
+  let coastAchieved = false;       // Latched once CoastFIRE is reached
+
+  // FIRE tier multipliers
+  const leanMultiplier = profile.assumptions.leanFireMultiplier || LEAN_FIRE_MULTIPLIER;
+  const fatMultiplier = profile.assumptions.fatFireMultiplier || FAT_FIRE_MULTIPLIER;
 
   // Generate year-by-year projections
   let cumulativeSavings = 0;
@@ -248,13 +274,18 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     const hasPension = age >= claimPensionAge;
     const yearsFromPension = age - claimPensionAge;
 
-    // TSP contributions while still working (employee + employer match for FERS)
+    // ── TSP: contributions while working, distributions in retirement ─────────
+    const returnRate = profile.tsp.returnAssumption;
+    const rothContrib = Math.min(profile.tsp.rothAnnualContribution || 0, profile.tsp.annualContribution);
+    const tradContrib = profile.tsp.annualContribution - rothContrib;
+
     if (stillWorking) {
       const salary = profile.employment.currentOrLastSalary;
       const employeeContributionPercent = profile.tsp.contributionPercent || 0;
       const employerMatch = calculateEmployerMatch(salary, employeeContributionPercent);
-      tspBalance += profile.tsp.annualContribution + employerMatch;
-      tspBalance *= (1 + profile.tsp.returnAssumption / 100);
+      // Employer match always goes to Traditional; employee Roth contributions to Roth
+      tspTradBalance = (tspTradBalance + tradContrib + employerMatch) * (1 + returnRate / 100);
+      tspRothBalance = (tspRothBalance + rothContrib) * (1 + returnRate / 100);
     }
 
     // Calculate pension with COLA (only if claiming)
@@ -264,21 +295,45 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       profile.assumptions.colaRate
     ) : 0;
 
-    // Calculate TSP distribution with age 55+ separation rule
-    // TSP can be accessed penalty-free if:
-    // 1. Age 59.5 or older (general IRS rule), OR
-    // 2. Separated from federal service at age 55+ (special TSP rule)
-    const canAccessTSP = !stillWorking && (age >= 59.5 || (leaveServiceAge >= 55 && age >= leaveServiceAge));
-    const tspDistribution = canAccessTSP ? calculateTSPDistribution(tspBalance, drawdownRate) : 0;
-
-    // Calculate TSP balance for next year (growth happens regardless)
-    if (!stillWorking) {
-      tspBalance = calculateTSPBalanceAfterYear(
-        tspBalance,
-        tspDistribution,
-        profile.tsp.returnAssumption
-      );
+    // ── Guardrails: compute effective withdrawal rate ─────────────────────────
+    // Record portfolio base at the moment of retirement
+    if (!stillWorking && retirementPortfolioBase === 0) {
+      retirementPortfolioBase = tspTradBalance + tspRothBalance + otherInvestmentsBalance;
     }
+    let effectiveWithdrawalRate = drawdownRate;
+    if (profile.assumptions.withdrawalStrategy === 'guardrails' && retirementPortfolioBase > 0) {
+      const totalPortfolio = tspTradBalance + tspRothBalance + otherInvestmentsBalance;
+      const ratio = totalPortfolio / retirementPortfolioBase;
+      const lower = (profile.assumptions.guardrailsLowerPct || 80) / 100;
+      const upper = (profile.assumptions.guardrailsUpperPct || 120) / 100;
+      const cut = (profile.assumptions.guardrailsSpendingCutPct || 10) / 100;
+      const bump = (profile.assumptions.guardrailsSpendingBumpPct || 10) / 100;
+      if (ratio < lower) {
+        effectiveWithdrawalRate = drawdownRate * (1 - cut);
+      } else if (ratio > upper) {
+        effectiveWithdrawalRate = drawdownRate * (1 + bump);
+      }
+    }
+
+    // TSP distribution with age 55+ separation rule (Traditional + Roth proportional)
+    const canAccessTSP = !stillWorking && (age >= 59.5 || (leaveServiceAge >= 55 && age >= leaveServiceAge));
+    const totalTSPForDist = tspTradBalance + tspRothBalance;
+    const tspDistribution = canAccessTSP ? totalTSPForDist * (effectiveWithdrawalRate / 100) : 0;
+    const rothFraction = totalTSPForDist > 0 ? tspRothBalance / totalTSPForDist : 0;
+    const tspRothDistribution = tspDistribution * rothFraction;
+    const tspTradDistribution = tspDistribution - tspRothDistribution;
+
+    // TSP balance update: Roth conversion (Traditional→Roth, taxable), then distributions + growth
+    if (!stillWorking) {
+      // Optional annual Roth conversion (e.g. before SS/pension income raises tax bracket)
+      const conversionAmount = Math.min(profile.tsp.rothConversionAnnual || 0, tspTradBalance);
+      tspTradBalance -= conversionAmount;
+      tspRothBalance += conversionAmount;
+      // Distributions and growth
+      tspTradBalance = Math.max(0, (tspTradBalance - tspTradDistribution) * (1 + returnRate / 100));
+      tspRothBalance = Math.max(0, (tspRothBalance - tspRothDistribution) * (1 + returnRate / 100));
+    }
+    tspBalance = tspTradBalance + tspRothBalance;
 
     // Estimate Social Security (uses user's actual estimate if provided; WEP applied to fallback only)
     const userSSEstimate = profile.employment.socialSecurityEstimate;
@@ -501,9 +556,12 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     // Net income (after expenses and taxes) — progressive federal + optional state tax
     const filingStatus: FilingStatus = spouse ? 'married' : 'single';
     const spouseAgeThisYear = spouse ? spouseCurrentAge + (age - currentAge) : undefined;
-    // Ordinary income: pension, FERS supplement, TSP distributions (all taxed as ordinary income)
-    // Spouse working income is ordinary income; spouse pension/TSP also ordinary
-    const ordinaryIncome = pension + fersSupplement + tspDistribution +
+    // Ordinary income: Traditional pension/TSP are taxable; Roth TSP distributions are NOT.
+    // Roth conversions ARE taxable in the year of conversion.
+    const rothConversionThisYear = !stillWorking
+      ? Math.min(profile.tsp.rothConversionAnnual || 0, tspTradBalance + tspTradDistribution)
+      : 0;
+    const ordinaryIncome = pension + fersSupplement + tspTradDistribution + rothConversionThisYear +
       spousePension + spouseTspDistribution +
       (spouse && spouseCurrentAge + (age - currentAge) < spouseLeaveServiceAge ? spouseCurrentIncome : 0) +
       (spouse?.retirementIncome || 0);
@@ -517,6 +575,33 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       stateTaxRate: profile.assumptions.stateTaxRate,
     });
     const netIncome = totalIncome - totalExpenses - taxResult.totalTax;
+
+    // ── FIRE metrics ──────────────────────────────────────────────────────────
+    // Pension-adjusted FIRE number: portfolio gap after guaranteed income at this year's expense level
+    const guaranteedIncome = pension + fersSupplement + socialSecurity +
+      (spousePension || 0) + (spouseSocialSecurity || 0);
+    const incomeGap = Math.max(0, totalExpenses - guaranteedIncome);
+    const adjustedFireNumber = incomeGap / (effectiveWithdrawalRate / 100);
+
+    // Lean / Fat FIRE numbers (scale only the living-expense portion)
+    const nonLivingExpenses = totalExpenses - inflatedLivingExpenses;
+    const leanTotalExp = inflatedLivingExpenses * leanMultiplier + nonLivingExpenses;
+    const fatTotalExp = inflatedLivingExpenses * fatMultiplier + nonLivingExpenses;
+    const leanFireNumber = Math.max(0, leanTotalExp - guaranteedIncome) / (effectiveWithdrawalRate / 100);
+    const fatFireNumber = Math.max(0, fatTotalExp - guaranteedIncome) / (effectiveWithdrawalRate / 100);
+
+    // CoastFIRE: balance needed now so that, with 0 new contributions, it grows to fireTargetAtRetirement
+    const yearsUntilRetirementFromHere = Math.max(0, claimPensionAge - age);
+    const coastFIRENumber = yearsUntilRetirementFromHere > 0
+      ? fireTargetAtRetirement / Math.pow(1 + returnRate / 100, yearsUntilRetirementFromHere)
+      : fireTargetAtRetirement;
+
+    // FI and CoastFIRE: latch true only for the first year each condition is met
+    const liquidWorth = tspBalance + otherInvestmentsBalance;
+    const fiThisYear = !fiAchieved && liquidWorth >= adjustedFireNumber && adjustedFireNumber > 0;
+    const coastThisYear = !coastAchieved && liquidWorth >= coastFIRENumber && coastFIRENumber > 0;
+    if (fiThisYear) fiAchieved = true;
+    if (coastThisYear) coastAchieved = true;
 
     // Calculate net worth (includes spouse TSP and non-federal 401k in household wealth)
     const netWorth = tspBalance + otherInvestmentsBalance + spouseTspBalance + nonFederal401kBalance + totalAssetValue - totalDebt;

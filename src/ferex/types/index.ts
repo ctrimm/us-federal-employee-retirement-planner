@@ -119,6 +119,10 @@ export interface TSPInfo {
   returnAssumption: number; // Default 6.5%
   currentAllocation?: TSPAllocation;
   employerMatch?: number; // Typically 5% for FERS
+  // Roth TSP tracking
+  rothBalance?: number; // Roth portion of currentBalance (rest is Traditional)
+  rothAnnualContribution?: number; // Annual Roth contributions (≤ annualContribution)
+  rothConversionAnnual?: number; // Annual Traditional→Roth conversion in early retirement (taxable event)
 }
 
 export type OtherAccountType =
@@ -156,6 +160,15 @@ export interface AssumptionsInfo {
   applyExpensesFromCurrentAge?: boolean; // Start expenses at current age instead of retirement
   expenseInflationRate?: number; // Rate to inflate expenses (defaults to inflationRate)
   stateTaxRate?: number; // Optional flat state income tax rate (e.g. 5 for 5%)
+  // Withdrawal strategy
+  withdrawalStrategy?: 'fixed_percent' | 'guardrails'; // Default fixed_percent
+  guardrailsLowerPct?: number; // Portfolio % of initial that triggers spending cut (default 80)
+  guardrailsUpperPct?: number; // Portfolio % of initial that triggers spending increase (default 120)
+  guardrailsSpendingCutPct?: number; // % to reduce withdrawal when below lower threshold (default 10)
+  guardrailsSpendingBumpPct?: number; // % to increase withdrawal when above upper threshold (default 10)
+  // FIRE tier multipliers
+  leanFireMultiplier?: number; // Living expense multiplier for LeanFIRE target (default 0.75)
+  fatFireMultiplier?: number; // Living expense multiplier for FatFIRE target (default 1.50)
 }
 
 // Life Events & Milestones
@@ -281,8 +294,19 @@ export interface ProjectionYear {
   expenses: number; // Total annual expenses
   collegeCosts: number; // Annual college costs for children (subset of expenses)
   netIncome: number; // After FEHB, expenses, estimated taxes
-  tspBalance: number; // Remaining
+  tspBalance: number; // Total TSP (Traditional + Roth)
+  tspRothBalance?: number; // Roth TSP portion (tax-free distributions)
+  tspTradDistribution?: number; // Traditional TSP withdrawn this year (taxable)
+  tspRothDistribution?: number; // Roth TSP withdrawn this year (tax-free)
+  effectiveWithdrawalRate?: number; // Actual withdrawal rate used (guardrails may vary it)
   otherInvestmentsBalance: number; // Combined other accounts
+  // FIRE metrics
+  adjustedFireNumber?: number; // Pension-adjusted portfolio target (expenses minus guaranteed income / drawdown rate)
+  leanFireNumber?: number; // FIRE target at lean spending (0.75× base living expenses)
+  fatFireNumber?: number; // FIRE target at fat spending (1.50× base living expenses)
+  coastFIRENumber?: number; // Balance needed today to coast to retirement without new contributions
+  isFinanciallyIndependent?: boolean; // True only for the first year FI condition is met
+  isCoastFIREAchieved?: boolean; // True only for the first year CoastFIRE condition is met
   totalDebt: number; // Remaining debt balance
   totalAssets: number; // Asset values
   netWorth: number; // Assets + investments - debts
@@ -351,6 +375,8 @@ export const FERS_ENHANCED_ACCRUAL_RATE = 0.011; // 1.1% per year (age 62+ with 
 export const FERS_SUPPLEMENT_AGE = 62;
 export const MRA_10_ANNUAL_REDUCTION = 0.05; // 5% per year under 62 for MRA+10 retirees
 export const MEDICARE_PART_B_MONTHLY_2024 = 174.70; // Standard Part B premium; grows with healthcareInflation
+export const LEAN_FIRE_MULTIPLIER = 0.75; // LeanFIRE: 75% of base living expenses
+export const FAT_FIRE_MULTIPLIER = 1.50; // FatFIRE: 150% of base living expenses
 
 export const CSRS_ACCRUAL_RATES = {
   first5Years: 0.015, // 1.5%
