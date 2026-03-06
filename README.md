@@ -9,15 +9,15 @@ A retirement planning calculator built specifically for US federal employees. FE
 ## Quick Start
 
 ```bash
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 Visit `http://localhost:4321/ferex` to use the app.
 
 ```bash
-npm run build    # Production build to /dist
-npm run preview  # Preview production build locally
+pnpm run build    # Production build to /dist
+pnpm run preview  # Preview production build locally
 ```
 
 ---
