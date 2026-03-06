@@ -168,6 +168,7 @@ export interface AssumptionsInfo {
   guardrailsSpendingBumpPct?: number; // % to increase withdrawal when above upper threshold (default 10)
   // FIRE tier multipliers
   leanFireMultiplier?: number; // Living expense multiplier for LeanFIRE target (default 0.75)
+  chubbyFireMultiplier?: number; // Living expense multiplier for ChubbyFIRE target (default 1.25)
   fatFireMultiplier?: number; // Living expense multiplier for FatFIRE target (default 1.50)
 }
 
@@ -303,6 +304,7 @@ export interface ProjectionYear {
   // FIRE metrics
   adjustedFireNumber?: number; // Pension-adjusted portfolio target (expenses minus guaranteed income / drawdown rate)
   leanFireNumber?: number; // FIRE target at lean spending (0.75× base living expenses)
+  chubbyFireNumber?: number; // FIRE target at chubby spending (1.25× base living expenses)
   fatFireNumber?: number; // FIRE target at fat spending (1.50× base living expenses)
   coastFIRENumber?: number; // Balance needed today to coast to retirement without new contributions
   isFinanciallyIndependent?: boolean; // True only for the first year FI condition is met
@@ -375,8 +377,9 @@ export const FERS_ENHANCED_ACCRUAL_RATE = 0.011; // 1.1% per year (age 62+ with 
 export const FERS_SUPPLEMENT_AGE = 62;
 export const MRA_10_ANNUAL_REDUCTION = 0.05; // 5% per year under 62 for MRA+10 retirees
 export const MEDICARE_PART_B_MONTHLY_2024 = 174.70; // Standard Part B premium; grows with healthcareInflation
-export const LEAN_FIRE_MULTIPLIER = 0.75; // LeanFIRE: 75% of base living expenses
-export const FAT_FIRE_MULTIPLIER = 1.50; // FatFIRE: 150% of base living expenses
+export const LEAN_FIRE_MULTIPLIER = 0.75;   // LeanFIRE: 75% of base living expenses
+export const CHUBBY_FIRE_MULTIPLIER = 1.25; // ChubbyFIRE: 125% of base living expenses
+export const FAT_FIRE_MULTIPLIER = 1.50;    // FatFIRE: 150% of base living expenses
 
 export const CSRS_ACCRUAL_RATES = {
   first5Years: 0.015, // 1.5%

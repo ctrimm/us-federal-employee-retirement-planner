@@ -23,7 +23,7 @@ import {
 } from './systemDetection';
 import { calculateRetirementTax } from './taxCalculator';
 import type { FilingStatus } from './taxCalculator';
-import { MEDICARE_PART_B_MONTHLY_2024, LEAN_FIRE_MULTIPLIER, FAT_FIRE_MULTIPLIER } from '../types';
+import { MEDICARE_PART_B_MONTHLY_2024, LEAN_FIRE_MULTIPLIER, CHUBBY_FIRE_MULTIPLIER, FAT_FIRE_MULTIPLIER } from '../types';
 
 /**
  * Determine eligibility information for a user profile
@@ -263,6 +263,7 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
 
   // FIRE tier multipliers
   const leanMultiplier = profile.assumptions.leanFireMultiplier || LEAN_FIRE_MULTIPLIER;
+  const chubbyMultiplier = profile.assumptions.chubbyFireMultiplier || CHUBBY_FIRE_MULTIPLIER;
   const fatMultiplier = profile.assumptions.fatFireMultiplier || FAT_FIRE_MULTIPLIER;
 
   // Generate year-by-year projections
@@ -583,11 +584,13 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     const incomeGap = Math.max(0, totalExpenses - guaranteedIncome);
     const adjustedFireNumber = incomeGap / (effectiveWithdrawalRate / 100);
 
-    // Lean / Fat FIRE numbers (scale only the living-expense portion)
+    // Lean / Chubby / Fat FIRE numbers (scale only the living-expense portion)
     const nonLivingExpenses = totalExpenses - inflatedLivingExpenses;
     const leanTotalExp = inflatedLivingExpenses * leanMultiplier + nonLivingExpenses;
+    const chubbyTotalExp = inflatedLivingExpenses * chubbyMultiplier + nonLivingExpenses;
     const fatTotalExp = inflatedLivingExpenses * fatMultiplier + nonLivingExpenses;
     const leanFireNumber = Math.max(0, leanTotalExp - guaranteedIncome) / (effectiveWithdrawalRate / 100);
+    const chubbyFireNumber = Math.max(0, chubbyTotalExp - guaranteedIncome) / (effectiveWithdrawalRate / 100);
     const fatFireNumber = Math.max(0, fatTotalExp - guaranteedIncome) / (effectiveWithdrawalRate / 100);
 
     // CoastFIRE: balance needed now so that, with 0 new contributions, it grows to fireTargetAtRetirement
@@ -636,6 +639,14 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       netIncome,
       tspBalance: Math.max(0, tspBalance),
       otherInvestmentsBalance: Math.max(0, otherInvestmentsBalance),
+      adjustedFireNumber,
+      leanFireNumber,
+      chubbyFireNumber,
+      fatFireNumber,
+      coastFIRENumber,
+      isFinanciallyIndependent: fiThisYear,
+      isCoastFIREAchieved: coastThisYear,
+      effectiveWithdrawalRate,
       totalDebt,
       totalAssets: totalAssetValue,
       netWorth,

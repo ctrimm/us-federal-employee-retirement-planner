@@ -166,6 +166,21 @@ export function UnifiedControlPanel({
   const [spouseSickLeave, setSpouseSickLeave] = useState(
     profile.personal.spouseInfo?.sickLeaveHours || 0
   );
+  // FIRE Settings
+  const [withdrawalStrategy, setWithdrawalStrategy] = useState<'fixed_percent' | 'guardrails'>(
+    profile.assumptions.withdrawalStrategy || 'fixed_percent'
+  );
+  const [leanFireMultiplier, setLeanFireMultiplier] = useState(
+    profile.assumptions.leanFireMultiplier || 0.75
+  );
+  const [chubbyFireMultiplier, setChubbyFireMultiplier] = useState(
+    profile.assumptions.chubbyFireMultiplier || 1.25
+  );
+  const [fatFireMultiplier, setFatFireMultiplier] = useState(
+    profile.assumptions.fatFireMultiplier || 1.50
+  );
+  const [fireSettingsOpen, setFireSettingsOpen] = useState(false);
+
   const [enableBaristaFire, setEnableBaristaFire] = useState(
     profile.retirement.enableBaristaFire || false
   );
@@ -391,6 +406,10 @@ export function UnifiedControlPanel({
         annualLivingExpenses: annualExpenses,
         applyExpensesFromCurrentAge,
         expenseInflationRate,
+        withdrawalStrategy,
+        leanFireMultiplier,
+        chubbyFireMultiplier,
+        fatFireMultiplier,
       },
       personal: {
         ...profile.personal,
@@ -640,6 +659,113 @@ export function UnifiedControlPanel({
                   onChange={(e) => setTspReturn(parseFloat(e.target.value))}
                   className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
                 />
+              </div>
+
+              {/* FIRE Settings — collapsible */}
+              <div className="pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => setFireSettingsOpen(o => !o)}
+                  className="flex items-center justify-between w-full text-sm font-semibold text-gray-700 hover:text-gray-900"
+                >
+                  <span>🔥 FIRE Settings</span>
+                  <span>{fireSettingsOpen ? '▲' : '▼'}</span>
+                </button>
+
+                {fireSettingsOpen && (
+                  <div className="mt-3 space-y-4">
+                    {/* Withdrawal Strategy */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Withdrawal Strategy</label>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setWithdrawalStrategy('fixed_percent')}
+                          className={`flex-1 py-1.5 rounded text-xs font-medium border transition-colors ${
+                            withdrawalStrategy === 'fixed_percent'
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                          }`}
+                        >
+                          Fixed {tspDrawdownRate}%
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setWithdrawalStrategy('guardrails')}
+                          className={`flex-1 py-1.5 rounded text-xs font-medium border transition-colors ${
+                            withdrawalStrategy === 'guardrails'
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                          }`}
+                        >
+                          Guardrails
+                        </button>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {withdrawalStrategy === 'guardrails'
+                          ? 'Rate adjusts ±10% when portfolio drifts outside 80–120% of retirement baseline'
+                          : 'Fixed withdrawal rate every year regardless of portfolio performance'}
+                      </p>
+                    </div>
+
+                    {/* LeanFIRE Multiplier */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        LeanFIRE Spending: {(leanFireMultiplier * 100).toFixed(0)}% of current
+                      </label>
+                      <input
+                        type="range"
+                        min="0.50"
+                        max="0.90"
+                        step="0.05"
+                        value={leanFireMultiplier}
+                        onChange={(e) => setLeanFireMultiplier(parseFloat(e.target.value))}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Very frugal retirement lifestyle
+                      </p>
+                    </div>
+
+                    {/* ChubbyFIRE Multiplier */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        ChubbyFIRE Spending: {(chubbyFireMultiplier * 100).toFixed(0)}% of current
+                      </label>
+                      <input
+                        type="range"
+                        min="1.00"
+                        max="1.40"
+                        step="0.05"
+                        value={chubbyFireMultiplier}
+                        onChange={(e) => setChubbyFireMultiplier(parseFloat(e.target.value))}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Comfortable retirement with some extras
+                      </p>
+                    </div>
+
+                    {/* FatFIRE Multiplier */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        FatFIRE Spending: {(fatFireMultiplier * 100).toFixed(0)}% of current
+                      </label>
+                      <input
+                        type="range"
+                        min="1.25"
+                        max="2.50"
+                        step="0.25"
+                        value={fatFireMultiplier}
+                        onChange={(e) => setFatFireMultiplier(parseFloat(e.target.value))}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-red-500"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Luxurious retirement with no spending constraints
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
