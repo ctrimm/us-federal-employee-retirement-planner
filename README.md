@@ -24,6 +24,9 @@ npm run preview  # Preview production build locally
 
 ## What FEREX Calculates
 
+### FIRE Milestones & CoastFIRE
+FEREX identifies four key financial independence milestones by calculating portfolio targets for four spending tiers: LeanFIRE (75% spending), ChubbyFIRE (125%), FatFIRE (150%), and your standard FIRE target (100% living expenses). It also computes CoastFIRE—the balance needed today to grow to your FIRE target by retirement without new contributions. All targets are pension-adjusted: guaranteed income from pension, FERS supplement, and Social Security reduces the required portfolio.
+
 ### Pension (FERS & CSRS)
 - **FERS:** `Annual Pension = High-3 × 1% × Years of Service`
 - **CSRS (tiered):**
@@ -75,6 +78,31 @@ Annual SS ≈ High-3 × 30%  (starting at age 67)
 ```
 This is conservative and accounts for WEP/GPO impact. Actual SS benefit depends on full earnings history.
 
+### FIRE Milestones (Financial Independence, Retire Early)
+The calculator identifies four key financial independence milestones based on portfolio targets:
+
+**LeanFIRE (75% spending):** Minimum lifestyle with reduced discretionary expenses.
+```
+Target = (Living Expenses × 0.75 + Non-living Expenses - Guaranteed Income) / Withdrawal Rate
+```
+
+**ChubbyFIRE (125% spending):** Comfortable lifestyle with current living standards.
+```
+Target = (Living Expenses × 1.25 + Non-living Expenses - Guaranteed Income) / Withdrawal Rate
+```
+
+**FatFIRE (150% spending):** Luxurious retirement with significant discretionary spending.
+```
+Target = (Living Expenses × 1.50 + Non-living Expenses - Guaranteed Income) / Withdrawal Rate
+```
+
+**CoastFIRE:** Portfolio large enough to grow to the FIRE target by retirement age without additional contributions. Calculated by discounting the retirement FIRE target back to the current year at the assumed TSP return rate.
+```
+CoastFIRE Target = FIRE Target at Retirement / (1 + Return Rate) ^ Years Until Retirement
+```
+
+Guaranteed income includes pension, FERS supplement, and Social Security. Non-living expenses (healthcare, college costs) are not reduced for FIRE tiers. All FIRE targets are pension-adjusted—the larger your guaranteed income, the smaller the portfolio required.
+
 ---
 
 ## Calculation Assumptions & Limitations
@@ -86,6 +114,10 @@ This is conservative and accounts for WEP/GPO impact. Actual SS benefit depends 
 | Healthcare inflation | 5.0% | Applied to FEHB premiums |
 | TSP return | 6.5% | Applied to TSP balance |
 | TSP drawdown | 4.0% | % of balance withdrawn per year |
+| Withdrawal strategy | Fixed percent | Can switch to guardrails (80-120% band) |
+| LeanFIRE multiplier | 75% | Minimum spending tier |
+| ChubbyFIRE multiplier | 125% | Comfortable spending tier |
+| FatFIRE multiplier | 150% | Luxury spending tier |
 | Tax rate | 15% | Flat effective rate — simplified |
 | Social Security | 30% of High-3 | Conservative WEP-adjusted estimate |
 | Life expectancy | 85 | Adjustable in profile |
@@ -114,13 +146,13 @@ src/ferex/
 │   │   ├── ExpressOnboarding.tsx      # 3-step quick flow
 │   │   └── ComprehensiveOnboarding.tsx # 7-step detailed flow
 │   ├── dashboard/
-│   │   ├── Dashboard.tsx              # Main results display
-│   │   ├── UnifiedControlPanel.tsx    # Settings sidebar (5 tabs)
+│   │   ├── Dashboard.tsx              # Main results display + FIRE hero/CoastFIRE/spectrum cards
+│   │   ├── UnifiedControlPanel.tsx    # Settings sidebar with FIRE Settings section
 │   │   └── ProjectionTable.tsx        # Year-by-year table
 │   └── charts/
 │       ├── IncomeProjectionChart.tsx  # Stacked area income chart
 │       ├── TSPBalanceChart.tsx        # TSP balance over time
-│       ├── NetWorthChart.tsx          # Total net worth
+│       ├── NetWorthChart.tsx          # Total net worth + CoastFIRE threshold line
 │       └── ExpensesChart.tsx          # Expense breakdown
 ├── hooks/
 │   ├── useScenario.ts       # Scenario state, calculation trigger
