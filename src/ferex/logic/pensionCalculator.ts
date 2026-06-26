@@ -215,7 +215,8 @@ export function calculateAnnualPension(profile: UserProfile): PensionBreakdown {
 }
 
 /**
- * Calculate pension with COLA adjustments for a future year
+ * Calculate pension with COLA adjustments for a future year (system-agnostic, full COLA).
+ * Retained for backward compatibility; prefer calculatePensionWithColaSchedule.
  */
 export function calculatePensionWithCOLA(
   basePension: number,
@@ -223,6 +224,47 @@ export function calculatePensionWithCOLA(
   colaRate: number
 ): number {
   return basePension * Math.pow(1 + colaRate / 100, yearsFromRetirement);
+}
+
+/**
+ * FERS "diet COLA": FERS retirees receive a reduced COLA versus CSRS/Social Security.
+ *  - If CPI increase ≤ 2%  → full CPI
+ *  - If CPI increase 2–3%  → 2%
+ *  - If CPI increase > 3%   → CPI minus 1%
+ * (CSRS receives the full CPI COLA.)
+ */
+export function fersDietCola(cpiRate: number): number {
+  if (cpiRate <= 2) return cpiRate;
+  if (cpiRate <= 3) return 2;
+  return cpiRate - 1;
+}
+
+/**
+ * Apply the correct COLA schedule to a pension for a given age.
+ *
+ * CSRS: full CPI COLA every year from the year the annuity begins.
+ * FERS: the reduced "diet" COLA, and — critically — FERS retirees generally receive
+ *       NO COLA until age 62 (special-provision retirees such as LEO/firefighter/ATC
+ *       are the exception). COLAs are not paid retroactively for the pre-62 years.
+ */
+export function calculatePensionWithColaSchedule(
+  basePension: number,
+  system: 'FERS' | 'CSRS',
+  currentAge: number,
+  claimAge: number,
+  cpiRate: number,
+  isSpecialProvision: boolean = false
+): number {
+  if (system === 'CSRS') {
+    const years = Math.max(0, currentAge - claimAge);
+    return basePension * Math.pow(1 + cpiRate / 100, years);
+  }
+
+  // FERS: COLAs start at age 62 (unless a special-provision retiree)
+  const colaStartAge = isSpecialProvision ? claimAge : Math.max(claimAge, 62);
+  const years = Math.max(0, currentAge - colaStartAge);
+  const fersRate = fersDietCola(cpiRate);
+  return basePension * Math.pow(1 + fersRate / 100, years);
 }
 
 /**
@@ -264,8 +306,9 @@ export function calculateSurvivorBenefit(
   survivorAnnuityType: string
 ): number {
   if (survivorAnnuityType === 'standard') {
-    // Survivor typically receives 50% of the unreduced annuity
-    // If the annuity was reduced by 10%, we need to calculate the unreduced amount first
+    // FERS survivor receives 50% of the unreduced annuity (the most common election).
+    // (CSRS allows up to 55%; this engine treats survivor benefits with the FERS 50%
+    // standard for simplicity — see README "Known simplifications".)
     const unreducedPension = annualPension / (1 - SURVIVOR_ANNUITY_REDUCTION.standard);
     return unreducedPension * 0.5;
   }

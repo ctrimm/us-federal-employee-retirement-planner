@@ -7,9 +7,9 @@
  *
  * Key rules applied:
  *  1. Federal progressive tax brackets (single or MFJ)
- *  2. Standard deduction, with extra $1,550 per person aged 65+
+ *  2. Standard deduction, with the age-65+ addition ($1,950 single / $1,550 each married)
  *  3. Social Security taxation: 0–85% of benefits taxable depending on
- *     combined income (Provisional Income test)
+ *     combined income (IRS Provisional Income worksheet — phases in gradually)
  *  4. FERS Supplement is treated as ordinary income (same as pension)
  *  5. TSP Traditional distributions are ordinary income
  *  6. Optional flat state income tax rate
@@ -46,8 +46,10 @@ const BRACKETS_MFJ: TaxBracket[] = [
 // 2024 Standard deductions
 const STANDARD_DEDUCTION_SINGLE = 14_600;
 const STANDARD_DEDUCTION_MFJ = 29_200;
-// Additional deduction per person 65+
-const ADDITIONAL_DEDUCTION_65 = 1_550;
+// Additional standard deduction per person 65+ (2024).
+// Single/HoH get a larger amount ($1,950) than married filers ($1,550 each).
+const ADDITIONAL_DEDUCTION_65_SINGLE = 1_950;
+const ADDITIONAL_DEDUCTION_65_MARRIED = 1_550;
 
 /**
  * Calculate federal income tax on a given taxable income using progressive brackets.
@@ -71,18 +73,22 @@ function applyBrackets(taxableIncome: number, brackets: TaxBracket[]): number {
 }
 
 /**
- * Determine what fraction of Social Security benefits is taxable.
+ * Determine the taxable amount of Social Security benefits using the IRS worksheet.
  *
  * IRS Provisional Income (PI) = AGI (excluding SS) + tax-exempt interest + 50% of SS benefits.
- * Thresholds are NOT indexed for inflation.
+ * Thresholds are NOT indexed for inflation. The taxable amount is the *lesser of*
+ * several capped amounts — not simply 50% or 85% of the full benefit — so it phases
+ * in gradually. (IRS Pub. 915 / SSA "Benefits Planner: Income Taxes".)
  *
- * Returns a value 0.0, 0.5, or 0.85 representing the taxable fraction.
+ * Returns the dollar amount of SS benefits subject to income tax.
  */
-function ssTaxableFraction(
+function ssTaxableAmount(
   agiExcludingSS: number,
   annualSSBenefit: number,
   filingStatus: FilingStatus
 ): number {
+  if (annualSSBenefit <= 0) return 0;
+
   const halfSS = annualSSBenefit * 0.5;
   const provisionalIncome = agiExcludingSS + halfSS;
 
@@ -90,8 +96,18 @@ function ssTaxableFraction(
   const threshold2 = filingStatus === 'married' ? 44_000 : 34_000;
 
   if (provisionalIncome <= threshold1) return 0;
-  if (provisionalIncome <= threshold2) return 0.5;
-  return 0.85;
+
+  // Middle tier: up to 50% of benefits phase in between threshold1 and threshold2.
+  if (provisionalIncome <= threshold2) {
+    return Math.min(0.5 * (provisionalIncome - threshold1), halfSS);
+  }
+
+  // Top tier: 85% of the excess over threshold2, plus the smaller of the
+  // middle-tier amount or half the gap between thresholds — capped at 85% of benefits.
+  const middleTierCap = 0.5 * (threshold2 - threshold1); // $6,000 MFJ / $4,500 single
+  const lowerPortion = Math.min(halfSS, middleTierCap);
+  const taxable = 0.85 * (provisionalIncome - threshold2) + lowerPortion;
+  return Math.min(taxable, 0.85 * annualSSBenefit);
 }
 
 export interface TaxInputs {
@@ -139,13 +155,13 @@ export function calculateRetirementTax(inputs: TaxInputs): TaxResult {
 
   // Standard deduction (base + extra for each person 65+)
   const baseDeduction = filingStatus === 'married' ? STANDARD_DEDUCTION_MFJ : STANDARD_DEDUCTION_SINGLE;
+  const additional65 = filingStatus === 'married' ? ADDITIONAL_DEDUCTION_65_MARRIED : ADDITIONAL_DEDUCTION_65_SINGLE;
   let standardDeduction = baseDeduction;
-  if (primaryAge >= 65) standardDeduction += ADDITIONAL_DEDUCTION_65;
-  if (filingStatus === 'married' && spouseAge && spouseAge >= 65) standardDeduction += ADDITIONAL_DEDUCTION_65;
+  if (primaryAge >= 65) standardDeduction += additional65;
+  if (filingStatus === 'married' && spouseAge && spouseAge >= 65) standardDeduction += additional65;
 
-  // SS taxation (Provisional Income test)
-  const fraction = ssTaxableFraction(ordinaryIncome, socialSecurityIncome, filingStatus);
-  const taxableSSBenefit = socialSecurityIncome * fraction;
+  // SS taxation (IRS Provisional Income worksheet — phases in, capped at 85%)
+  const taxableSSBenefit = ssTaxableAmount(ordinaryIncome, socialSecurityIncome, filingStatus);
 
   // Total AGI = ordinary income + taxable SS portion
   const agi = ordinaryIncome + taxableSSBenefit;
@@ -154,8 +170,12 @@ export function calculateRetirementTax(inputs: TaxInputs): TaxResult {
   const brackets = filingStatus === 'married' ? BRACKETS_MFJ : BRACKETS_SINGLE;
   const federalTax = applyBrackets(taxableIncome, brackets);
 
-  // State tax: flat rate applied to total gross income (simplified)
-  const stateTax = grossIncome * ((stateTaxRate || 0) / 100);
+  // State tax: flat rate applied to ordinary income + taxable SS portion (federal AGI).
+  // This excludes the non-taxable portion of Social Security and all Roth distributions
+  // (which are not in ordinaryIncome). Most income-taxing states exempt SS entirely; this
+  // is a reasonable middle-ground simplification rather than taxing gross income.
+  const stateTaxableBase = Math.max(0, ordinaryIncome + taxableSSBenefit);
+  const stateTax = stateTaxableBase * ((stateTaxRate || 0) / 100);
 
   const totalTax = federalTax + stateTax;
   const effectiveRate = grossIncome > 0 ? totalTax / grossIncome : 0;

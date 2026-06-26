@@ -320,7 +320,7 @@ export function Dashboard({
               <p className="text-sm text-muted-foreground">
                 {eligibility.fehbEligible
                   ? 'You can continue Federal Employee Health Benefits into retirement'
-                  : 'You need 5+ years of service for FEHB eligibility'}
+                  : 'Requires retiring on an immediate annuity with 5+ years of FEHB enrollment'}
               </p>
             </div>
           </div>

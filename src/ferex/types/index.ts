@@ -377,6 +377,9 @@ export const FERS_ENHANCED_ACCRUAL_RATE = 0.011; // 1.1% per year (age 62+ with 
 export const FERS_SUPPLEMENT_AGE = 62;
 export const MRA_10_ANNUAL_REDUCTION = 0.05; // 5% per year under 62 for MRA+10 retirees
 export const MEDICARE_PART_B_MONTHLY_2024 = 174.70; // Standard Part B premium; grows with healthcareInflation
+// Age-62 Social Security benefit is roughly 70% of the full-retirement-age (67) benefit.
+// Used to convert an entered FRA estimate into an age-62 figure for the FERS supplement.
+export const SS_AGE62_TO_FRA_RATIO = 0.70;
 export const LEAN_FIRE_MULTIPLIER = 0.75;   // LeanFIRE: 75% of base living expenses
 export const CHUBBY_FIRE_MULTIPLIER = 1.25; // ChubbyFIRE: 125% of base living expenses
 export const FAT_FIRE_MULTIPLIER = 1.50;    // FatFIRE: 150% of base living expenses

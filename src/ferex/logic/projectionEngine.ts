@@ -10,7 +10,7 @@ import type {
   PensionBreakdown,
 } from '../types';
 import { DEFAULT_LIFE_EXPECTANCY } from '../types';
-import { calculateAnnualPension, calculatePensionWithCOLA, calculateSpouseAnnualPension } from './pensionCalculator';
+import { calculateAnnualPension, calculatePensionWithColaSchedule, calculateSpouseAnnualPension } from './pensionCalculator';
 import { calculateTSPBalanceAfterYear, calculateTSPDistribution, calculateEmployerMatch } from './tspCalculator';
 import { calculateAnnualFEHBCost } from './fehbCalculator';
 import {
@@ -23,7 +23,7 @@ import {
 } from './systemDetection';
 import { calculateRetirementTax } from './taxCalculator';
 import type { FilingStatus } from './taxCalculator';
-import { MEDICARE_PART_B_MONTHLY_2024, LEAN_FIRE_MULTIPLIER, CHUBBY_FIRE_MULTIPLIER, FAT_FIRE_MULTIPLIER } from '../types';
+import { MEDICARE_PART_B_MONTHLY_2024, LEAN_FIRE_MULTIPLIER, CHUBBY_FIRE_MULTIPLIER, FAT_FIRE_MULTIPLIER, SS_AGE62_TO_FRA_RATIO } from '../types';
 
 /**
  * Determine eligibility information for a user profile
@@ -75,7 +75,7 @@ export function determineEligibility(profile: UserProfile): EligibilityInfo {
     earliestRetirementDate,
     fullBenefitsAge,
     fullBenefitsDate,
-    fehbEligible: isFEHBEligible(currentAge, totalYears),
+    fehbEligible: isFEHBEligible(earliestInfo.age, totalYears, profile.personal.birthYear),
     totalYearsOfService: totalYears,
     detectedSystem,
   };
@@ -91,7 +91,8 @@ function estimateSocialSecurity(
   high3: number,
   age: number,
   ssEstimate?: number,
-  wepMonthlyReduction?: number
+  wepMonthlyReduction?: number,
+  detectedSystem?: string
 ): number {
   if (age < 67) return 0;
 
@@ -100,7 +101,12 @@ function estimateSocialSecurity(
     return ssEstimate;
   }
 
-  // Fallback approximation — apply WEP reduction only here (not on user-provided estimates)
+  // CSRS employees did not pay into Social Security on their federal earnings, so a
+  // high-3-based fallback would invent a benefit they have not earned (and any SS from
+  // other work is heavily cut by WEP). Without an explicit estimate, assume $0 for CSRS.
+  if (detectedSystem === 'CSRS') return 0;
+
+  // FERS fallback approximation — apply WEP reduction only here (not on user-provided estimates)
   const rawEstimate = high3 * 0.30;
   const annualWEP = (wepMonthlyReduction || 0) * 12;
   return Math.max(0, rawEstimate - annualWEP);
@@ -131,16 +137,19 @@ function calculateFERSSupplement(
   // Only paid between retirement and age 62
   if (age < claimPensionAge || age >= 62) return 0;
 
-  // Only for immediate full annuity (30+ years at MRA, or 20+ years at age 60)
-  // MRA+10 retirements do NOT qualify
-  const qualifiesForSupplement = totalYears >= 30 || (totalYears >= 20 && claimPensionAge <= 60);
+  // Only for immediate full annuity (MRA with 30+ years, or age 60+ with 20+ years).
+  // MRA+10 retirements do NOT qualify.
+  const qualifiesForSupplement = totalYears >= 30 || (totalYears >= 20 && claimPensionAge >= 60);
   if (!qualifiesForSupplement) return 0;
 
-  // Use user's actual SS estimate if provided; otherwise fall back to approximation.
-  // The supplement is designed to approximate the SS benefit earned during federal service.
-  // OPM uses the estimated SS at 62; if the user has a full-retirement-age estimate we use it directly
-  // as a close proxy (slightly conservative since 62 benefit would be ~70% of FRA benefit).
-  const estimatedSSAt62 = ssEstimate && ssEstimate > 0 ? ssEstimate : high3 * 0.30;
+  // OPM computes the supplement using the estimated SS benefit *at age 62*. A user's SSA
+  // estimate is typically stated at full retirement age (67), where the benefit is larger;
+  // the age-62 benefit is roughly 70% of it. We scale the FRA estimate down so the
+  // supplement is not over-stated. (The supplement is also subject to the SS earnings
+  // test once the retiree has wages above the annual limit — not modeled here.)
+  const estimatedSSAt62 = ssEstimate && ssEstimate > 0
+    ? ssEstimate * SS_AGE62_TO_FRA_RATIO
+    : high3 * 0.30 * SS_AGE62_TO_FRA_RATIO;
 
   // Supplement = estimated SS × (FERS years / 40 qualifying years)
   const supplementFraction = Math.min(fersYears / 40, 1);
@@ -178,6 +187,17 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     profile.employment.sickLeaveHours || 0
   );
   const supplementDetectedSystem = eligibilityForSupplement.detectedSystem;
+  // Primary retirement system (treat mixed/auto as FERS for COLA/match/SS purposes)
+  const primarySystem: 'FERS' | 'CSRS' = supplementDetectedSystem === 'CSRS' ? 'CSRS' : 'FERS';
+
+  // FEHB can only be carried into retirement on an immediate annuity (and after meeting
+  // the 5-year coverage rule). If the user retires without qualifying, FEHB premiums are
+  // not charged — such retirees must budget separate (e.g. ACA) coverage, which is not modeled.
+  const fehbEligibleInRetirement = isFEHBEligible(
+    claimPensionAge,
+    eligibilityForSupplement.totalYearsOfService,
+    profile.personal.birthYear
+  );
 
   // ── Non-federal 401k pre-computation ──────────────────────────────────────
   // For each non-federal period that has a 401k balance:
@@ -232,6 +252,12 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
 
   // Pre-calculate spouse's federal pension (if applicable) — base amount before COLA
   const spouseBasePension = spouse ? calculateSpouseAnnualPension(spouse) : 0;
+  // Detect spouse's retirement system for the correct COLA schedule
+  let spouseSystem: 'FERS' | 'CSRS' = 'FERS';
+  if (spouse?.servicePeriods) {
+    const s = calculateServiceBySystem(spouse.servicePeriods, spouse.sickLeaveHours || 0);
+    spouseSystem = s.csrsYears > s.fersYears ? 'CSRS' : 'FERS';
+  }
 
   // Track spouse TSP balance throughout projection
   let spouseTspBalance = spouse?.tspCurrentBalance || 0;
@@ -248,11 +274,21 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
   // Estimate the pension-adjusted FIRE number at the planned retirement age so
   // we can discount it back to compute a CoastFIRE target for each projection year.
   const yearsUntilRetirement = Math.max(0, claimPensionAge - currentAge);
-  const expensesAtRetirement = baseLivingExpenses *
-    Math.pow(1 + expenseInflationRate / 100, yearsUntilRetirement);
+  const inflationFactorToRetirement = Math.pow(1 + expenseInflationRate / 100, yearsUntilRetirement);
+  // Expenses at retirement: living expenses plus FEHB (if eligible to carry it), both in
+  // future dollars — consistent with the per-year FIRE expense base.
+  const fehbAtRetirement = isFEHBEligible(claimPensionAge, eligibilityForSupplement.totalYearsOfService, profile.personal.birthYear)
+    ? calculateAnnualFEHBCost(profile.assumptions.fehbCoverageLevel, claimPensionAge, yearsUntilRetirement, profile.assumptions.healthcareInflation)
+    : 0;
+  const expensesAtRetirement = baseLivingExpenses * inflationFactorToRetirement + fehbAtRetirement;
   const userSSEstimateForCoast = profile.employment.socialSecurityEstimate;
-  const guaranteedAtRetirement = basePension +
-    (claimPensionAge >= 67 ? (userSSEstimateForCoast || pensionInfo.high3 * 0.30) : 0);
+  // basePension is derived from today's salary; inflate it to retirement-year dollars (using
+  // wage growth ≈ inflation as a proxy) so it is comparable to the inflated expenses above.
+  const pensionAtRetirement = basePension * inflationFactorToRetirement;
+  const ssAtRetirement = claimPensionAge >= 67
+    ? (userSSEstimateForCoast || (primarySystem === 'CSRS' ? 0 : pensionInfo.high3 * 0.30))
+    : 0;
+  const guaranteedAtRetirement = pensionAtRetirement + ssAtRetirement;
   const incomeGapAtRetirement = Math.max(0, expensesAtRetirement - guaranteedAtRetirement);
   const fireTargetAtRetirement = incomeGapAtRetirement / (drawdownRate / 100);
 
@@ -273,7 +309,6 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     const year = profile.personal.birthYear + age;
     const stillWorking = age < leaveServiceAge;
     const hasPension = age >= claimPensionAge;
-    const yearsFromPension = age - claimPensionAge;
 
     // ── TSP: contributions while working, distributions in retirement ─────────
     const returnRate = profile.tsp.returnAssumption;
@@ -283,16 +318,22 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     if (stillWorking) {
       const salary = profile.employment.currentOrLastSalary;
       const employeeContributionPercent = profile.tsp.contributionPercent || 0;
-      const employerMatch = calculateEmployerMatch(salary, employeeContributionPercent);
+      // CSRS employees receive no agency automatic (1%) or matching TSP contributions.
+      const employerMatch = primarySystem === 'CSRS'
+        ? 0
+        : calculateEmployerMatch(salary, employeeContributionPercent);
       // Employer match always goes to Traditional; employee Roth contributions to Roth
       tspTradBalance = (tspTradBalance + tradContrib + employerMatch) * (1 + returnRate / 100);
       tspRothBalance = (tspRothBalance + rothContrib) * (1 + returnRate / 100);
     }
 
-    // Calculate pension with COLA (only if claiming)
-    const pension = hasPension ? calculatePensionWithCOLA(
+    // Calculate pension with the correct COLA schedule (only if claiming).
+    // FERS receives the diet COLA and no COLA before age 62; CSRS receives full CPI COLA.
+    const pension = hasPension ? calculatePensionWithColaSchedule(
       basePension,
-      Math.max(0, yearsFromPension),
+      primarySystem,
+      age,
+      claimPensionAge,
       profile.assumptions.colaRate
     ) : 0;
 
@@ -339,7 +380,7 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     // Estimate Social Security (uses user's actual estimate if provided; WEP applied to fallback only)
     const userSSEstimate = profile.employment.socialSecurityEstimate;
     const socialSecurity = estimateSocialSecurity(
-      pensionInfo.high3, age, userSSEstimate, profile.employment.wepMonthlyReduction
+      pensionInfo.high3, age, userSSEstimate, profile.employment.wepMonthlyReduction, primarySystem
     );
 
     // Calculate FERS Supplement (paid between retirement and age 62 for eligible immediate annuitants)
@@ -353,8 +394,8 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       userSSEstimate
     );
 
-    // Calculate FEHB cost (only after leaving service)
-    const fehbCost = stillWorking ? 0 : calculateAnnualFEHBCost(
+    // Calculate FEHB cost (only after leaving service, and only if eligible to carry FEHB)
+    const fehbCost = (stillWorking || !fehbEligibleInRetirement) ? 0 : calculateAnnualFEHBCost(
       profile.assumptions.fehbCoverageLevel,
       age,
       Math.max(0, age - leaveServiceAge),
@@ -362,19 +403,21 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     );
 
     // Medicare Part B premium — added at 65+ for primary and/or spouse.
-    // Standard 2024 premium grows at healthcareInflation rate each year.
-    // If a user-provided SS estimate is from SSA.gov it is already WEP-adjusted;
-    // Part B is a separate out-of-pocket cost on top of FEHB.
+    // Standard 2024 premium grows at healthcareInflation rate each year. A worker covered
+    // by active FEHB can delay Part B penalty-free, so we start Part B at the later of age 65
+    // and the age they leave service (Special Enrollment Period). Part B is a separate
+    // out-of-pocket cost on top of FEHB. IRMAA surcharges for high earners are not modeled.
     let medicarePremium = 0;
     const medicareAnnualBase = MEDICARE_PART_B_MONTHLY_2024 * 12;
-    if (age >= 65) {
+    if (age >= 65 && !stillWorking) {
       const yearsOnMedicare = age - 65;
       medicarePremium += medicareAnnualBase *
         Math.pow(1 + profile.assumptions.healthcareInflation / 100, yearsOnMedicare);
     }
     if (spouse) {
       const currentSpouseAgeThisYear = spouseCurrentAge + (age - currentAge);
-      if (currentSpouseAgeThisYear >= 65) {
+      const spouseStillWorkingForMedicare = currentSpouseAgeThisYear < spouseLeaveServiceAge;
+      if (currentSpouseAgeThisYear >= 65 && !spouseStillWorkingForMedicare) {
         const spouseMedicareYears = currentSpouseAgeThisYear - 65;
         medicarePremium += medicareAnnualBase *
           Math.pow(1 + profile.assumptions.healthcareInflation / 100, spouseMedicareYears);
@@ -428,10 +471,11 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
 
         // Spouse federal pension (with COLA from the year they claimed)
         if (spouseHasClaimed && spouseBasePension > 0) {
-          const yearsFromSpouseClaim = currentSpouseAge - spouseRetirementAge;
-          spousePension = calculatePensionWithCOLA(
+          spousePension = calculatePensionWithColaSchedule(
             spouseBasePension,
-            Math.max(0, yearsFromSpouseClaim),
+            spouseSystem,
+            currentSpouseAge,
+            spouseRetirementAge,
             profile.assumptions.colaRate
           );
         }
@@ -514,11 +558,14 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     });
     totalExpenses += collegeCosts;
 
-    // Add life events costs
+    // Add life events costs (track one-time events so they can be excluded from the
+    // perpetual FIRE expense base — a one-off cost shouldn't be annualized into a 25× target)
+    let oneTimeLifeEventCosts = 0;
     (profile.planning?.lifeEvents || []).forEach(event => {
       if (event.year === year) {
         if (!event.recurring) {
           totalExpenses += event.amount || 0;
+          oneTimeLifeEventCosts += event.amount || 0;
         }
       }
       // Handle recurring events
@@ -578,14 +625,22 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     const netIncome = totalIncome - totalExpenses - taxResult.totalTax;
 
     // ── FIRE metrics ──────────────────────────────────────────────────────────
+    // Perpetual expense base for FIRE: exclude one-off, finite costs that shouldn't be
+    // annualized into a 25× target (debt payments end when the loan is paid; one-time life
+    // events happen once). Include this year's taxes, since the portfolio must fund them too.
+    const perpetualExpenses = Math.max(
+      0,
+      totalExpenses - totalDebtPayments - oneTimeLifeEventCosts + taxResult.totalTax
+    );
+
     // Pension-adjusted FIRE number: portfolio gap after guaranteed income at this year's expense level
     const guaranteedIncome = pension + fersSupplement + socialSecurity +
       (spousePension || 0) + (spouseSocialSecurity || 0);
-    const incomeGap = Math.max(0, totalExpenses - guaranteedIncome);
+    const incomeGap = Math.max(0, perpetualExpenses - guaranteedIncome);
     const adjustedFireNumber = incomeGap / (effectiveWithdrawalRate / 100);
 
     // Lean / Chubby / Fat FIRE numbers (scale only the living-expense portion)
-    const nonLivingExpenses = totalExpenses - inflatedLivingExpenses;
+    const nonLivingExpenses = perpetualExpenses - inflatedLivingExpenses;
     const leanTotalExp = inflatedLivingExpenses * leanMultiplier + nonLivingExpenses;
     const chubbyTotalExp = inflatedLivingExpenses * chubbyMultiplier + nonLivingExpenses;
     const fatTotalExp = inflatedLivingExpenses * fatMultiplier + nonLivingExpenses;
@@ -599,8 +654,10 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       ? fireTargetAtRetirement / Math.pow(1 + returnRate / 100, yearsUntilRetirementFromHere)
       : fireTargetAtRetirement;
 
-    // FI and CoastFIRE: latch true only for the first year each condition is met
-    const liquidWorth = tspBalance + otherInvestmentsBalance;
+    // FI and CoastFIRE: latch true only for the first year each condition is met.
+    // Liquid worth counts all household investment assets (primary TSP, spouse TSP,
+    // other investments, and any non-rolled-over non-federal 401k).
+    const liquidWorth = tspBalance + otherInvestmentsBalance + spouseTspBalance + nonFederal401kBalance;
     const fiThisYear = !fiAchieved && liquidWorth >= adjustedFireNumber && adjustedFireNumber > 0;
     const coastThisYear = !coastAchieved && liquidWorth >= coastFIRENumber && coastFIRENumber > 0;
     if (fiThisYear) fiAchieved = true;

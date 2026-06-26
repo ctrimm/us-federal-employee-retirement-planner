@@ -147,6 +147,27 @@ This document tracks planned features and enhancements for future releases of FE
   - Show when eligible to start drawing
   - Compare immediate vs. deferred options
 
+### Federal Retirement Strategy Modeling (from community/expert tips)
+
+Strategies surfaced in the README "Federal Retirement Tips & Strategies" section that are
+currently documented as guidance but **not yet fully modeled** in the engine:
+
+- [ ] **Lump-sum annual leave payout** at retirement (up to the 240-hr carryover, paid at
+  final salary rate) as a one-time taxable inflow in the retirement year; let users tune
+  the retirement month to model the leave-year tax shift and the FERS "first of next month"
+  annuity-start gap.
+- [ ] **Postponed MRA+10 annuity** as a distinct option from immediate MRA+10: let the user
+  pick an annuity start age that reduces/eliminates the 5%/yr penalty, with FEHB suspended
+  until the annuity begins (and reinstated thereafter).
+- [ ] **FERS Supplement earnings test**: reduce the supplement $1 for every $2 of wages above
+  the annual Social Security earnings limit when Barista-FIRE/part-time income is active.
+- [ ] **Military service deposit** buyback: add active-duty years to FERS service in exchange
+  for a deposit (~3% of military base pay + interest).
+- [ ] **VERA / VSIP early-out** scenarios (age 50 + 20 yrs, or any age + 25 yrs) with optional
+  separation incentive payment.
+- [ ] **FEHB suspend → Medicare Advantage / TRICARE** option, including TRICARE time counting
+  toward the 5-year FEHB rule.
+
 ### User Experience
 
 - [ ] **Dark Mode**

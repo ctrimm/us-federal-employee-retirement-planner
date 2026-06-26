@@ -188,16 +188,25 @@ export function calculateEarliestRetirementAge(
 }
 
 /**
- * Check FEHB eligibility
- * Must have 5+ years of service to carry into retirement
+ * Check FEHB eligibility to carry coverage into retirement.
+ *
+ * Real rule (5 U.S.C. 8905 / OPM): the employee must have been enrolled in FEHB for
+ * the 5 years immediately preceding retirement (or since first eligibility) AND retire
+ * on an immediate annuity. We cannot see FEHB enrollment history, so we approximate the
+ * 5-year rule with 5+ years of service, but we DO enforce the immediate-annuity test.
+ *
+ * Immediate annuity requires one of: age 62 with 5+ years, age 60 with 20+ years,
+ * or MRA with 30+ years. (MRA+10 also yields an immediate annuity, but if postponed to
+ * preserve a larger benefit, FEHB is suspended until the annuity begins — not modeled.)
  */
 export function isFEHBEligible(
-  currentAge: number,
-  totalYearsOfService: number
+  ageAtRetirement: number,
+  totalYearsOfService: number,
+  birthYear: number
 ): boolean {
-  // Generally need 5 years of FEHB participation and retire on immediate annuity
-  // Simplified: 5+ years of service
-  if (totalYearsOfService >= 5) return true;
+  // Must meet the 5-year (approximated by service) coverage requirement
+  if (totalYearsOfService < 5) return false;
 
-  return false;
+  // Must retire on an immediate annuity
+  return canRetireNow(ageAtRetirement, totalYearsOfService, birthYear);
 }

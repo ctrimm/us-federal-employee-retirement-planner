@@ -23,75 +23,13 @@ export function calculateAnnualFEHBCost(
 ): number {
   const baseCost = FEHB_BASE_COSTS[coverageLevel];
 
-  // Apply healthcare inflation
+  // Apply healthcare inflation only. FEHB is community-rated: unlike ACA/individual
+  // plans, the enrollee's premium share does NOT increase with age, so no age surcharge
+  // is applied. (Retirees pay the same premium as active employees in the same plan.)
   const inflationMultiplier = Math.pow(1 + healthcareInflationRate / 100, yearsFromNow);
-  let adjustedCost = baseCost * inflationMultiplier;
-
-  // Apply age adjustment (costs tend to increase with age)
-  // Rough estimate: 1% increase per year after 65
-  if (age > 65) {
-    const ageAdjustment = 1 + ((age - 65) * 0.01);
-    adjustedCost *= ageAdjustment;
-  }
-
-  return adjustedCost;
+  return baseCost * inflationMultiplier;
 }
 
-/**
- * Check if eligible for FEHB in retirement
- */
-export function isFEHBEligibleInRetirement(
-  yearsOfService: number,
-  ageAtRetirement: number
-): boolean {
-  // Generally need 5+ years of FEHB participation
-  // Must retire on immediate annuity
-
-  // Simplified eligibility:
-  // - 5+ years of service AND
-  // - Retiring on immediate annuity (age 62+ with 5 years, or age 60+ with 20 years, or MRA+ with 30 years)
-
-  return yearsOfService >= 5;
-}
-
-/**
- * Calculate Medicare savings (FEHB becomes supplement after 65)
- */
-export function calculateMedicareSavings(
-  fehbCost: number
-): number {
-  // When Medicare kicks in at 65, FEHB acts as supplement
-  // Typically reduces out-of-pocket costs by 20-30%
-  // But Medicare Part B premium (~$2000/year) applies
-
-  const medicarePartBPremium = 2000;
-  const fehbReduction = fehbCost * 0.25; // 25% reduction when used as supplement
-
-  return fehbReduction - medicarePartBPremium;
-}
-
-/**
- * Project FEHB costs over retirement years
- */
-export function projectFEHBCosts(
-  coverageLevel: FEHBCoverageLevel,
-  retirementAge: number,
-  endAge: number,
-  healthcareInflationRate: number
-): Array<{ age: number; cost: number }> {
-  const costs: Array<{ age: number; cost: number }> = [];
-
-  for (let age = retirementAge; age <= endAge; age++) {
-    const yearsFromRetirement = age - retirementAge;
-    const cost = calculateAnnualFEHBCost(
-      coverageLevel,
-      age,
-      yearsFromRetirement,
-      healthcareInflationRate
-    );
-
-    costs.push({ age, cost });
-  }
-
-  return costs;
-}
+// Note: FEHB↔Medicare coordination (FEHB acting as secondary after 65) is intentionally
+// not modeled as a premium reduction — most retirees keep paying both the FEHB share and
+// the Medicare Part B premium, which the projection engine accounts for separately.
