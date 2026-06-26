@@ -3,7 +3,7 @@
  * Determines FERS vs CSRS based on service history
  */
 
-import type { ServicePeriod, RetirementSystem, EmploymentInfo } from '../types';
+import type { ServicePeriod, RetirementSystem, EmploymentInfo, SpecialProvisionType } from '../types';
 import { STANDARD_WORK_HOURS_PER_YEAR } from '../types';
 
 const FERS_START_DATE = new Date('1984-01-01');
@@ -140,13 +140,13 @@ export function calculateServiceBySystem(
  * `specialProvisionType` treats all (non-military) FERS service as covered.
  */
 export function resolveSpecialYears(
-  employment: EmploymentInfo,
+  source: { servicePeriods?: ServicePeriod[]; specialProvisionType?: SpecialProvisionType },
   fersYearsExcludingMilitary: number,
   specialYearsFromPeriods: number
 ): number {
-  const anyFlagged = (employment.servicePeriods || []).some((p) => p.specialProvision);
+  const anyFlagged = (source.servicePeriods || []).some((p) => p.specialProvision);
   if (anyFlagged) return specialYearsFromPeriods;
-  if (employment.specialProvisionType && employment.specialProvisionType !== 'none') {
+  if (source.specialProvisionType && source.specialProvisionType !== 'none') {
     return fersYearsExcludingMilitary;
   }
   return 0;

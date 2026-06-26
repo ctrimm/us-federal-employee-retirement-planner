@@ -55,6 +55,7 @@ export interface SpouseInfo {
   servicePeriods?: ServicePeriod[]; // Federal service history
   high3Salary?: number; // High-3 average salary for spouse pension calculation
   sickLeaveHours?: number; // Unused sick leave hours
+  specialProvisionType?: SpecialProvisionType; // FERS special provisions (LEO/FF/ATC) for the spouse
   // Spouse TSP
   tspCurrentBalance?: number; // Current TSP balance for spouse
   tspAnnualContribution?: number; // Annual employee TSP contribution while working

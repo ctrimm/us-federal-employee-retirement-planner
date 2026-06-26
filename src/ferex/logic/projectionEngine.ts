@@ -392,9 +392,11 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
   const spouseBasePension = spouse ? calculateSpouseAnnualPension(spouse) : 0;
   // Detect spouse's retirement system for the correct COLA schedule
   let spouseSystem: 'FERS' | 'CSRS' = 'FERS';
+  let spouseIsSpecial = false;
   if (spouse?.servicePeriods) {
     const s = calculateServiceBySystem(spouse.servicePeriods, spouse.sickLeaveHours || 0);
     spouseSystem = s.csrsYears > s.fersYears ? 'CSRS' : 'FERS';
+    spouseIsSpecial = resolveSpecialYears(spouse, s.fersYears, s.specialYears) > 0;
   }
 
   // Track spouse TSP balance throughout projection
@@ -647,7 +649,8 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
             spouseSystem,
             currentSpouseAge,
             spouseRetirementAge,
-            profile.assumptions.colaRate
+            profile.assumptions.colaRate,
+            spouseIsSpecial
           );
         }
 

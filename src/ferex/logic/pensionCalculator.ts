@@ -290,7 +290,7 @@ export function calculateSpouseAnnualPension(spouse: SpouseInfo): number {
     return 0;
   }
 
-  const { fersYears, csrsYears } = calculateServiceBySystem(
+  const { fersYears, csrsYears, specialYears } = calculateServiceBySystem(
     spouse.servicePeriods,
     spouse.sickLeaveHours || 0
   );
@@ -298,6 +298,19 @@ export function calculateSpouseAnnualPension(spouse: SpouseInfo): number {
   if (fersYears === 0 && csrsYears === 0) return 0;
 
   const spouseRetAge = spouse.retirementAge;
+
+  // Special provisions (LEO/FF/ATC): 1.7% first 20 covered years + 1.0% after, on the FERS portion.
+  const effSpecialYears = resolveSpecialYears(spouse, fersYears, specialYears);
+  if (effSpecialYears > 0) {
+    const regularFersYears = Math.max(0, fersYears - effSpecialYears);
+    let pension = spouse.high3Salary * (
+      FERS_SPECIAL_ACCRUAL_RATE * Math.min(effSpecialYears, FERS_SPECIAL_FIRST_YEARS) +
+      FERS_ACCRUAL_RATE * Math.max(0, effSpecialYears - FERS_SPECIAL_FIRST_YEARS)
+    );
+    if (regularFersYears > 0) pension += calculateFERSPension(spouse.high3Salary, regularFersYears, 'none', spouseRetAge);
+    if (csrsYears > 0) pension += calculateCSRSPension(spouse.high3Salary, csrsYears, 'none');
+    return pension;
+  }
 
   // Mixed service
   if (fersYears > 0 && csrsYears > 0) {

@@ -167,6 +167,9 @@ export function UnifiedControlPanel({
   const [spouseSickLeave, setSpouseSickLeave] = useState(
     profile.personal.spouseInfo?.sickLeaveHours || 0
   );
+  const [spouseSpecialProvision, setSpouseSpecialProvision] = useState<SpecialProvisionType>(
+    profile.personal.spouseInfo?.specialProvisionType || 'none'
+  );
   // FIRE Settings
   const [withdrawalStrategy, setWithdrawalStrategy] = useState<'fixed_percent' | 'guardrails'>(
     profile.assumptions.withdrawalStrategy || 'fixed_percent'
@@ -462,6 +465,7 @@ export function UnifiedControlPanel({
               servicePeriods: spouseIsFederal ? spouseServicePeriods : undefined,
               high3Salary: spouseIsFederal ? spouseHigh3 : undefined,
               sickLeaveHours: spouseIsFederal ? spouseSickLeave : undefined,
+              specialProvisionType: spouseIsFederal ? spouseSpecialProvision : undefined,
             }
           : undefined,
       },
@@ -1485,6 +1489,26 @@ export function UnifiedControlPanel({
                             />
                             <p className="text-xs text-gray-500 mt-1">
                               ~2,087 hours = 1 year service credit
+                            </p>
+                          </div>
+
+                          {/* Special Provision Category */}
+                          <div>
+                            <label className="block text-xs font-medium mb-1">
+                              Special Provision Category
+                            </label>
+                            <select
+                              value={spouseSpecialProvision}
+                              onChange={(e) => setSpouseSpecialProvision(e.target.value as SpecialProvisionType)}
+                              className="w-full px-2 py-1 border rounded text-sm"
+                            >
+                              <option value="none">None (regular FERS)</option>
+                              <option value="leo_firefighter">Law Enforcement / Firefighter / CBPO</option>
+                              <option value="atc">Air Traffic Controller</option>
+                              <option value="other">Other special category</option>
+                            </select>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Enhanced 1.7%/1.0% accrual and immediate COLAs for high-risk careers.
                             </p>
                           </div>
 
