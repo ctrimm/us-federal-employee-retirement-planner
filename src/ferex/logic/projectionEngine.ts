@@ -24,7 +24,7 @@ import {
   creditableServicePeriods,
   resolveSpecialYears,
 } from './systemDetection';
-import { calculateRetirementTax, TAX_BRACKET_BASE_YEAR } from './taxCalculator';
+import { calculateRetirementTax, TAX_BRACKET_BASE_YEAR, bracketCeilingForRate, standardDeductionFor } from './taxCalculator';
 import type { FilingStatus } from './taxCalculator';
 import {
   MEDICARE_PART_B_MONTHLY_2024, LEAN_FIRE_MULTIPLIER, CHUBBY_FIRE_MULTIPLIER, FAT_FIRE_MULTIPLIER,
@@ -251,6 +251,40 @@ function calculateFERSSupplement(
   return estimatedSSAt62 * supplementFraction;
 }
 
+// After-tax terminal wealth: net worth less the deferred tax owed on the remaining
+// Traditional (pre-tax) balance. Used as the objective for the multi-year conversion search.
+const ASSUMED_FUTURE_TAX_RATE = 0.22;
+function afterTaxTerminalWealth(projections: ProjectionYear[]): number {
+  const last = projections[projections.length - 1];
+  if (!last) return -Infinity;
+  return (last.netWorth || 0) - (last.traditionalBalance || 0) * ASSUMED_FUTURE_TAX_RATE;
+}
+
+/**
+ * Multi-year global optimization for Roth conversions: run the full projection for each
+ * candidate bracket target and pick the one that maximizes after-tax terminal net worth.
+ * Returns the chosen marginal rate (0 = no conversions).
+ */
+export function optimizeRothConversionBracket(profile: UserProfile): number {
+  const candidates = [0, 0.10, 0.12, 0.22, 0.24];
+  let best = 0;
+  let bestScore = -Infinity;
+  for (const rate of candidates) {
+    const test: UserProfile = {
+      ...profile,
+      tsp: { ...profile.tsp, rothConversionAnnual: rate === 0 ? 0 : profile.tsp.rothConversionAnnual },
+      assumptions: {
+        ...profile.assumptions,
+        rothConversionStrategy: rate === 0 ? 'manual' : 'fill_bracket',
+        rothConversionBracketCeiling: rate,
+      },
+    };
+    const score = afterTaxTerminalWealth(generateProjections(test));
+    if (score > bestScore) { bestScore = score; best = rate; }
+  }
+  return best;
+}
+
 /**
  * Generate year-by-year retirement projections
  */
@@ -296,6 +330,17 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
 
   // Age at which Traditional TSP RMDs begin (SECURE 2.0: 73 or 75 by birth year).
   const rmdAge = rmdStartAge(profile.personal.birthYear);
+
+  // ── Roth conversion plan ──────────────────────────────────────────────────────
+  // Resolve the target bracket to fill (0 = none). 'auto' triggers a multi-year search.
+  let conversionCeiling = 0;
+  if (profile.assumptions.rothConversionStrategy === 'fill_bracket') {
+    const c = profile.assumptions.rothConversionBracketCeiling;
+    conversionCeiling = c === 'auto' ? optimizeRothConversionBracket(profile) : (typeof c === 'number' ? c : 0.12);
+  }
+  // Conversion window: default from retirement until the year before RMDs begin (most valuable).
+  const convStartAge = profile.assumptions.rothConversionStartAge ?? leaveServiceAge;
+  const convEndAge = profile.assumptions.rothConversionEndAge ?? (rmdAge - 1);
 
   // FERS annuity begins the first of the month after separation, so a mid-year separation
   // prorates the first year's annuity. A December (or unspecified) separation is treated as a
@@ -832,8 +877,9 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     const taxInflationFactor = Math.pow(1 + profile.assumptions.inflationRate / 100, Math.max(0, year - TAX_BRACKET_BASE_YEAR));
     const primaryRetired = !stillWorking;
     const primaryAccess = primaryRetired && canAccessTSP;
+    let rothConversionThisYear = 0;
 
-    if (primaryAccess || spouseAccessible) {
+    if (primaryRetired || spouseAccessible) {
       const spouseWorkingIncome = spouseStillWorking ? spouseCurrentIncome : 0;
       // Mandatory RMDs (primary by their age, spouse by theirs).
       const tspRmd = primaryAccess && age >= rmdAge ? requiredMinimumDistribution(tspTradBalance, age) : 0;
@@ -939,11 +985,37 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       otherTaxableGains = otherTaxableDistribution * pGainFrac;
       spouseOtherTaxableGains = spouseOtherTaxableDistribution * sGainFrac;
 
-      // Apply primary growth (retired): Roth conversion, then (balance − distribution) × growth.
+      // ── Roth conversion plan (Traditional → Roth, taxable this year) ──────────────
+      // fill_bracket: convert household pre-tax balances up to the top of a target bracket,
+      // within the conversion window. manual: a fixed dollar amount from the primary TSP.
+      let convTspTrad = 0, convOtherDef = 0, convSpTsp = 0, convSpDef = 0;
+      if (conversionCeiling > 0 && age >= convStartAge && age <= convEndAge) {
+        const ceiling = bracketCeilingForRate(conversionCeiling, filingStatus, taxInflationFactor);
+        const deduction = standardDeductionFor(filingStatus, age, spouseAgeThisYear, taxInflationFactor);
+        const deferredWithdrawalIncome = tspTradDistribution + nonFed401kDistribution + otherDeferredDistribution +
+          spouseTspDistribution + spouseOtherDeferredDistribution;
+        const baseOrd = pension + fersSupplement + otherIncome + lumpSumLeavePayout + vsipPayout +
+          spousePension + spouseWorkingIncome + (spouse?.retirementIncome || 0) + deferredWithdrawalIncome;
+        const ssEst = 0.85 * (socialSecurity + spouseSocialSecurity); // conservative SS-taxability estimate
+        const currentTaxable = Math.max(0, baseOrd + ssEst - deduction);
+        let headroom = Math.max(0, ceiling - currentTaxable);
+        if (primaryRetired) {
+          convTspTrad = Math.min(headroom, Math.max(0, tspTradBalance - tspTradDistribution)); headroom -= convTspTrad;
+          convOtherDef = Math.min(headroom, Math.max(0, otherDeferredBalance - otherDeferredDistribution)); headroom -= convOtherDef;
+        }
+        if (spouseAccessible) {
+          convSpTsp = Math.min(headroom, Math.max(0, spouseTspBalance - spouseTspDistribution)); headroom -= convSpTsp;
+          convSpDef = Math.min(headroom, Math.max(0, spDeferredBalance - spouseOtherDeferredDistribution)); headroom -= convSpDef;
+        }
+      } else if (profile.assumptions.rothConversionStrategy !== 'fill_bracket' && primaryRetired) {
+        convTspTrad = Math.min(profile.tsp.rothConversionAnnual || 0, Math.max(0, tspTradBalance - tspTradDistribution));
+      }
+      rothConversionThisYear = convTspTrad + convOtherDef + convSpTsp + convSpDef;
+
+      // Apply primary growth (retired): conversions, then (balance − distribution) × growth.
       if (primaryRetired) {
-        const conversionAmount = Math.min(profile.tsp.rothConversionAnnual || 0, tspTradBalance);
-        tspTradBalance -= conversionAmount;
-        tspRothBalance += conversionAmount;
+        tspTradBalance -= convTspTrad; tspRothBalance += convTspTrad;
+        otherDeferredBalance -= convOtherDef; otherRothBalance += convOtherDef;
         tspTradBalance = Math.max(0, (tspTradBalance - tspTradDistribution) * (1 + returnRate / 100));
         tspRothBalance = Math.max(0, (tspRothBalance - tspRothDistribution) * (1 + returnRate / 100));
         nonFederal401kBalance = Math.max(0, (nonFederal401kBalance - nonFed401kDistribution) * (1 + nonFed401kReturnRate / 100));
@@ -954,8 +1026,10 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
         otherTaxableBasis = Math.max(0, otherTaxableBasis - (otherTaxableDistribution - otherTaxableGains) + otherTaxableDividends);
         otherTaxableBalance = pBalAfter * (1 + taxableReturn);
       }
-      // Apply spouse growth (accessible).
+      // Apply spouse growth (accessible): spouse conversions go to the spouse's Roth.
       if (spouseAccessible) {
+        spouseTspBalance -= convSpTsp; spRothBalance += convSpTsp;
+        spDeferredBalance -= convSpDef; spRothBalance += convSpDef;
         spouseTspBalance = Math.max(0, (spouseTspBalance - spouseTspDistribution) * (1 + spouseTspReturn));
         spDeferredBalance = Math.max(0, (spDeferredBalance - spouseOtherDeferredDistribution) * (1 + spPools.deferredReturn));
         spRothBalance = Math.max(0, (spRothBalance - spouseOtherRothDistribution) * (1 + spPools.rothReturn));
@@ -968,6 +1042,8 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
 
     tspBalance = tspTradBalance + tspRothBalance;
     const spouseOtherBalance = spDeferredBalance + spRothBalance + spTaxableBalance + spIlliquidBalance;
+    // Total remaining pre-tax (Traditional) balance across the household — drives future RMDs.
+    const traditionalBalance = tspTradBalance + nonFederal401kBalance + otherDeferredBalance + spouseTspBalance + spDeferredBalance;
     otherInvestmentsDistribution = otherDeferredDistribution + otherRothDistribution + otherTaxableDistribution + nonFed401kDistribution +
       spouseTspDistribution + spouseOtherDeferredDistribution + spouseOtherRothDistribution + spouseOtherTaxableDistribution;
     otherInvestmentsBalance = otherDeferredBalance + otherRothBalance + otherTaxableBalance + otherIlliquidBalance;
@@ -977,12 +1053,7 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     const totalIncome = pension + tspDistribution + socialSecurity + fersSupplement +
       spouseIncome + otherIncome + otherInvestmentsDistribution + lumpSumLeavePayout + vsipPayout;
 
-    // Ordinary income: Traditional pension/TSP are taxable; Roth TSP distributions are NOT.
-    // Roth conversions ARE taxable in the year of conversion. Earned income (part-time/
-    // Barista-FIRE wages and side-hustle/self-employment) is fully taxable ordinary income.
-    const rothConversionThisYear = !stillWorking
-      ? Math.min(profile.tsp.rothConversionAnnual || 0, tspTradBalance + tspTradDistribution)
-      : 0;
+    // Roth conversions (set in the consolidated block) are taxable ordinary income this year.
     // Deferred non-TSP withdrawals (Traditional IRA/401k + non-federal 401k) are ordinary
     // income; Roth withdrawals are excluded; taxable-account gains are taxed as capital gains.
     // Spouse deferred withdrawals (TSP + IRA/401k) are ordinary income; spouse Roth is excluded;
@@ -1097,6 +1168,8 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       stateTax: taxResult.stateTax,
       totalTax: taxResult.totalTax,
       capitalGainsTax: taxResult.capitalGainsTax,
+      rothConversion: rothConversionThisYear,
+      traditionalBalance,
       effectiveTaxRate: taxResult.effectiveRate,
       expenses: totalExpenses,
       collegeCosts,

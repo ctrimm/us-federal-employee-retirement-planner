@@ -63,6 +63,28 @@ const ADDITIONAL_DEDUCTION_65_SINGLE = 1_950;
 const ADDITIONAL_DEDUCTION_65_MARRIED = 1_550;
 
 /**
+ * Taxable-income ceiling for a given marginal rate (the top of that bracket), inflation-indexed.
+ * Used to "fill up" a bracket with Roth conversions. Returns Infinity for the top rate.
+ */
+export function bracketCeilingForRate(rate: number, filingStatus: FilingStatus, inflationFactor: number = 1): number {
+  const brackets = filingStatus === 'married' ? BRACKETS_MFJ : BRACKETS_SINGLE;
+  const b = brackets.find((x) => Math.abs(x.rate - rate) < 1e-9);
+  if (!b) return Infinity;
+  return b.upTo === Infinity ? Infinity : b.upTo * inflationFactor;
+}
+
+/**
+ * Standard deduction (base + age-65 addition) for the given filing status, inflation-indexed.
+ */
+export function standardDeductionFor(filingStatus: FilingStatus, primaryAge: number, spouseAge: number | undefined, inflationFactor: number = 1): number {
+  let d = filingStatus === 'married' ? STANDARD_DEDUCTION_MFJ : STANDARD_DEDUCTION_SINGLE;
+  const add = filingStatus === 'married' ? ADDITIONAL_DEDUCTION_65_MARRIED : ADDITIONAL_DEDUCTION_65_SINGLE;
+  if (primaryAge >= 65) d += add;
+  if (filingStatus === 'married' && spouseAge && spouseAge >= 65) d += add;
+  return d * inflationFactor;
+}
+
+/**
  * Calculate federal income tax on a given taxable income using progressive brackets.
  * Bracket thresholds are scaled by `inflationFactor` to approximate annual inflation indexing.
  */

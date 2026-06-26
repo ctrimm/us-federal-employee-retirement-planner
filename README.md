@@ -133,6 +133,7 @@ Guaranteed income includes pension, FERS supplement, and Social Security. Non-li
 - **Income:** pension, Social Security (provisional-income taxation, WEP), TSP (Traditional/Roth, Rule of 55, Roth conversions), **whole-portfolio drawdown** of non-federal 401k + IRA/401k/brokerage/Roth taxed by type, **RMDs (73/75)**, part-time/Barista & side-hustle, spouse modeling, lump-sum annual leave, VSIP
 - **Taxes:** progressive 2024 brackets **inflation-indexed**, standard + age-65 deduction, **long-term capital gains (0/15/20%)**, dividend/interest drag, optional state tax, **Medicare Part B + IRMAA**
 - **Withdrawal strategies:** fixed-percent, guardrails (±10% in an 80–120% band), and **tax-optimal ordering** (fund the spending gap from taxable → tax-deferred → Roth, RMDs first, with a fixed-point tax gross-up)
+- **Roth conversion optimization:** auto-convert household pre-tax balances to Roth each year to fill a target bracket (10/12/22/24%) within the low-income window before RMDs — plus an **Auto** mode that searches every bracket target across the whole projection and picks the one maximizing **after-tax terminal wealth** (multi-year global optimization)
 - **Special provisions:** primary **and spouse** (LEO/firefighter/ATC) — 1.7%/1.0% accrual + immediate COLA
 - **Full household picture:** spouse's own TSP **and non-TSP accounts** (IRA / 401k / brokerage / Roth) — for a current or former fed — are modeled, taxed by type, given spouse-age RMDs, counted in net worth, and **folded into the household drawdown** (including the tax-optimal order)
 - **Other:** FIRE tiers + CoastFIRE, debts/assets/college/life-events, **separation-month proration**, charts (income, expenses, **taxes**, TSP, net worth) with toggleable series
@@ -143,7 +144,6 @@ Guaranteed income includes pension, FERS supplement, and Social Security. Non-li
 - IRMAA refinements (2-year MAGI lookback, Part D surcharge)
 - Per-account cost-basis input in the account editor (engine supports it; UI uses a default)
 - Exact enforcement of mandatory retirement ages (currently surfaced as guidance)
-- Multi-year (global) tax optimization, and Roth-conversion optimization within the tax-optimal strategy
 
 ---
 
@@ -189,7 +189,8 @@ Guaranteed income includes pension, FERS supplement, and Social Security. Non-li
 - State tax is an optional flat rate on ordinary income + taxable SS + capital gains (excludes the non-taxable SS portion and Roth distributions); it does not model state-specific pension exemptions.
 
 **Known simplifications:**
-- The **tax-optimal** strategy is a single-year greedy ordering across the whole household (both spouses' taxable → tax-deferred → Roth, RMDs first) solved with a fixed-point tax gross-up; it is not a multi-year global optimization.
+- The **tax-optimal** strategy is a single-year greedy ordering across the whole household (both spouses' taxable → tax-deferred → Roth, RMDs first) solved with a fixed-point tax gross-up. Multi-year tax planning is handled separately by the Roth-conversion optimizer (which does search across years); a fully unified multi-year withdrawal+conversion global optimum is not attempted.
+- The Roth-conversion **Auto** optimizer maximizes after-tax terminal wealth using an assumed 22% future tax rate on remaining pre-tax balances; the bracket-fill headroom uses a conservative 85%-taxable estimate for any Social Security in the conversion year.
 - IRMAA uses the current year's MAGI (the real program uses a 2-year lookback) and models the Part B surcharge (not Part D).
 - Social Security benefit estimate is an approximation — actual benefit requires an SSA earnings record. CSRS service earns no SS.
 - Taxable-account dividends are treated as qualified (LTCG rates); savings-account interest is not separately taxed as ordinary income.

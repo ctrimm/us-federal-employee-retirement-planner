@@ -182,7 +182,9 @@ Still open:
 - [x] **Full household accounts**: the spouse's own TSP and non-TSP accounts (IRA/401k/brokerage/Roth)
   are modeled, taxed by type, given spouse-age RMDs, counted in net worth, and folded into the
   household drawdown (including the tax-optimal order). Works for a current or former federal spouse.
-  _Remaining:_ multi-year global tax optimization; Roth-conversion optimization.
+- [x] **Roth conversion optimization**: auto-convert household pre-tax → Roth each year to fill a
+  target bracket within the pre-RMD window; plus an **Auto** mode that globally searches bracket
+  targets across the whole projection and maximizes after-tax terminal wealth (multi-year optimization).
 
 ### User Experience
 

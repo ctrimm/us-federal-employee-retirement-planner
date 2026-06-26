@@ -177,6 +177,11 @@ export function UnifiedControlPanel({
   const [withdrawalStrategy, setWithdrawalStrategy] = useState<'fixed_percent' | 'guardrails' | 'tax_optimal'>(
     profile.assumptions.withdrawalStrategy || 'fixed_percent'
   );
+  // Roth conversion strategy: 'off' (none) | a bracket rate (0.10/0.12/0.22/0.24) | 'auto'
+  const initialRoth = profile.assumptions.rothConversionStrategy === 'fill_bracket'
+    ? (profile.assumptions.rothConversionBracketCeiling ?? 0.12)
+    : 'off';
+  const [rothConversion, setRothConversion] = useState<number | 'off' | 'auto'>(initialRoth as number | 'off' | 'auto');
   const [leanFireMultiplier, setLeanFireMultiplier] = useState(
     profile.assumptions.leanFireMultiplier || 0.75
   );
@@ -462,6 +467,8 @@ export function UnifiedControlPanel({
         applyExpensesFromCurrentAge,
         expenseInflationRate,
         withdrawalStrategy,
+        rothConversionStrategy: rothConversion === 'off' ? 'manual' : 'fill_bracket',
+        rothConversionBracketCeiling: rothConversion === 'off' ? undefined : rothConversion,
         leanFireMultiplier,
         chubbyFireMultiplier,
         fatFireMultiplier,
@@ -779,6 +786,33 @@ export function UnifiedControlPanel({
                           : withdrawalStrategy === 'tax_optimal'
                           ? 'Withdraws only what you need to cover spending, drawing taxable → tax-deferred → Roth (RMDs first) to minimize taxes and preserve growth'
                           : 'Fixed withdrawal rate every year regardless of portfolio performance'}
+                      </p>
+                    </div>
+
+                    {/* Roth Conversion Strategy */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Roth Conversions</label>
+                      <select
+                        value={String(rothConversion)}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setRothConversion(v === 'off' || v === 'auto' ? (v as 'off' | 'auto') : parseFloat(v));
+                        }}
+                        className="w-full px-3 py-2 border rounded-md text-sm"
+                      >
+                        <option value="off">Off</option>
+                        <option value="0.1">Fill to 10% bracket</option>
+                        <option value="0.12">Fill to 12% bracket</option>
+                        <option value="0.22">Fill to 22% bracket</option>
+                        <option value="0.24">Fill to 24% bracket</option>
+                        <option value="auto">Auto-optimize (maximize after-tax wealth)</option>
+                      </select>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {rothConversion === 'auto'
+                          ? 'Searches every bracket target across your whole retirement and picks the one that leaves the most after-tax wealth (multi-year optimization).'
+                          : rothConversion === 'off'
+                          ? 'No automatic conversions. Converting pre-tax → Roth in low-income years can cut lifetime taxes by shrinking future RMDs.'
+                          : 'Converts household pre-tax balances to Roth each year up to the top of this bracket, from retirement until RMDs begin.'}
                       </p>
                     </div>
 

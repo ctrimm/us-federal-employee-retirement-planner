@@ -190,6 +190,15 @@ export interface AssumptionsInfo {
   expenseInflationRate?: number; // Rate to inflate expenses (defaults to inflationRate)
   stateTaxRate?: number; // Optional flat state income tax rate (e.g. 5 for 5%)
   taxableDividendYield?: number; // Annual dividend/interest yield on taxable accounts (%, default 2)
+  // ── Roth conversion optimization ──
+  // 'manual'      → convert a fixed dollar amount per year (tsp.rothConversionAnnual)
+  // 'fill_bracket' → auto-convert household Traditional→Roth to fill up to a target tax bracket
+  rothConversionStrategy?: 'manual' | 'fill_bracket';
+  // Target marginal rate to fill (e.g. 0.12, 0.22, 0.24), or 'auto' to globally search the
+  // candidate that maximizes terminal after-tax net worth across the whole projection.
+  rothConversionBracketCeiling?: number | 'auto';
+  rothConversionStartAge?: number; // First age to run conversions (default: retirement)
+  rothConversionEndAge?: number;   // Last age (default: the year before RMDs begin)
   // Withdrawal strategy
   withdrawalStrategy?: 'fixed_percent' | 'guardrails' | 'tax_optimal'; // Default fixed_percent
   guardrailsLowerPct?: number; // Portfolio % of initial that triggers spending cut (default 80)
@@ -328,6 +337,8 @@ export interface ProjectionYear {
   stateTax?: number;
   totalTax?: number;
   capitalGainsTax?: number; // Long-term capital gains tax on taxable-account withdrawals
+  rothConversion?: number; // Traditional→Roth converted this year (taxable ordinary income)
+  traditionalBalance?: number; // Household remaining pre-tax balance (drives future RMDs)
   effectiveTaxRate?: number;
   expenses: number; // Total annual expenses
   collegeCosts: number; // Annual college costs for children (subset of expenses)
