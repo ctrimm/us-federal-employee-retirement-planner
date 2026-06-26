@@ -171,7 +171,7 @@ export function UnifiedControlPanel({
     profile.personal.spouseInfo?.specialProvisionType || 'none'
   );
   // FIRE Settings
-  const [withdrawalStrategy, setWithdrawalStrategy] = useState<'fixed_percent' | 'guardrails'>(
+  const [withdrawalStrategy, setWithdrawalStrategy] = useState<'fixed_percent' | 'guardrails' | 'tax_optimal'>(
     profile.assumptions.withdrawalStrategy || 'fixed_percent'
   );
   const [leanFireMultiplier, setLeanFireMultiplier] = useState(
@@ -739,10 +739,23 @@ export function UnifiedControlPanel({
                         >
                           Guardrails
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => setWithdrawalStrategy('tax_optimal')}
+                          className={`flex-1 py-1.5 rounded text-xs font-medium border transition-colors ${
+                            withdrawalStrategy === 'tax_optimal'
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                          }`}
+                        >
+                          Tax-Optimal
+                        </button>
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">
                         {withdrawalStrategy === 'guardrails'
                           ? 'Rate adjusts ±10% when portfolio drifts outside 80–120% of retirement baseline'
+                          : withdrawalStrategy === 'tax_optimal'
+                          ? 'Withdraws only what you need to cover spending, drawing taxable → tax-deferred → Roth (RMDs first) to minimize taxes and preserve growth'
                           : 'Fixed withdrawal rate every year regardless of portfolio performance'}
                       </p>
                     </div>

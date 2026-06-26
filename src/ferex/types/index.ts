@@ -189,7 +189,7 @@ export interface AssumptionsInfo {
   stateTaxRate?: number; // Optional flat state income tax rate (e.g. 5 for 5%)
   taxableDividendYield?: number; // Annual dividend/interest yield on taxable accounts (%, default 2)
   // Withdrawal strategy
-  withdrawalStrategy?: 'fixed_percent' | 'guardrails'; // Default fixed_percent
+  withdrawalStrategy?: 'fixed_percent' | 'guardrails' | 'tax_optimal'; // Default fixed_percent
   guardrailsLowerPct?: number; // Portfolio % of initial that triggers spending cut (default 80)
   guardrailsUpperPct?: number; // Portfolio % of initial that triggers spending increase (default 120)
   guardrailsSpendingCutPct?: number; // % to reduce withdrawal when below lower threshold (default 10)

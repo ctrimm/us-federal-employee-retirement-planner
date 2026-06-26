@@ -500,35 +500,10 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       }
     }
 
-    // TSP distribution with age 55+ separation rule (Traditional + Roth proportional)
+    // Retirement withdrawals from all primary accounts are decided together — after this
+    // year's expenses and guaranteed income are known — in the consolidated block below.
     const canAccessTSP = !stillWorking && (age >= 59.5 || (leaveServiceAge >= 55 && age >= leaveServiceAge));
-    const totalTSPForDist = tspTradBalance + tspRothBalance;
-    let tspDistribution = canAccessTSP ? totalTSPForDist * (effectiveWithdrawalRate / 100) : 0;
-    const rothFraction = totalTSPForDist > 0 ? tspRothBalance / totalTSPForDist : 0;
-    const tspRothDistribution = tspDistribution * rothFraction;
-    let tspTradDistribution = tspDistribution - tspRothDistribution;
-
-    // Required Minimum Distributions: once RMD age is reached (and separated from service),
-    // the Traditional balance must distribute at least the IRS Uniform Lifetime amount. This
-    // forces taxable income even if the chosen drawdown rate is lower. Roth TSP has no RMD.
-    if (canAccessTSP && age >= rmdAge) {
-      const rmd = requiredMinimumDistribution(tspTradBalance, age);
-      if (rmd > tspTradDistribution) {
-        tspTradDistribution = Math.min(rmd, tspTradBalance);
-        tspDistribution = tspTradDistribution + tspRothDistribution;
-      }
-    }
-
-    // TSP balance update: Roth conversion (Traditional→Roth, taxable), then distributions + growth
-    if (!stillWorking) {
-      // Optional annual Roth conversion (e.g. before SS/pension income raises tax bracket)
-      const conversionAmount = Math.min(profile.tsp.rothConversionAnnual || 0, tspTradBalance);
-      tspTradBalance -= conversionAmount;
-      tspRothBalance += conversionAmount;
-      // Distributions and growth
-      tspTradBalance = Math.max(0, (tspTradBalance - tspTradDistribution) * (1 + returnRate / 100));
-      tspRothBalance = Math.max(0, (tspRothBalance - tspRothDistribution) * (1 + returnRate / 100));
-    }
+    let tspDistribution = 0, tspTradDistribution = 0, tspRothDistribution = 0;
     tspBalance = tspTradBalance + tspRothBalance;
 
     // Estimate Social Security (uses user's actual estimate if provided; WEP applied to fallback only)
@@ -588,28 +563,19 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       }
     }
 
-    // ── Non-federal 401k: contributions while working, drawdown in retirement ──────
+    // ── Non-federal 401k: contributions + growth while working; drawdown deferred to the
+    // consolidated retirement-withdrawal block below (pre-tax → ordinary income, RMDs apply).
     const nonFed401kReturnRate = activeNonFederalPeriod?.return401kAssumption ?? profile.tsp.returnAssumption;
-    // Add contributions from an active non-federal period (while the user is in that job)
-    // We treat the non-federal period as active up until leaveServiceAge (when they return to federal)
-    if (activeNonFederalPeriod && age < leaveServiceAge) {
-      const annualContrib = activeNonFederalPeriod.annual401kContribution || 0;
-      const salary = activeNonFederalPeriod.annualSalary || 0;
-      const matchPct = activeNonFederalPeriod.employerMatch401kPercent || 0;
-      const employerMatchAmt = salary * (matchPct / 100);
-      nonFederal401kBalance += annualContrib + employerMatchAmt;
-    }
-    // Drawdown in retirement: a non-federal 401k is pre-tax, so withdrawals are ordinary
-    // income and subject to RMDs once the RMD age is reached.
     let nonFed401kDistribution = 0;
-    if (canAccessTSP && nonFederal401kBalance > 0) {
-      nonFed401kDistribution = nonFederal401kBalance * (effectiveWithdrawalRate / 100);
-      if (age >= rmdAge) {
-        const rmd = requiredMinimumDistribution(nonFederal401kBalance, age);
-        if (rmd > nonFed401kDistribution) nonFed401kDistribution = Math.min(rmd, nonFederal401kBalance);
+    if (stillWorking) {
+      if (activeNonFederalPeriod && age < leaveServiceAge) {
+        const annualContrib = activeNonFederalPeriod.annual401kContribution || 0;
+        const salary = activeNonFederalPeriod.annualSalary || 0;
+        const matchPct = activeNonFederalPeriod.employerMatch401kPercent || 0;
+        nonFederal401kBalance += annualContrib + salary * (matchPct / 100);
       }
+      nonFederal401kBalance *= (1 + nonFed401kReturnRate / 100);
     }
-    nonFederal401kBalance = Math.max(0, (nonFederal401kBalance - nonFed401kDistribution) * (1 + nonFed401kReturnRate / 100));
 
     // ── Full spouse income modeling ───────────────────────────────────────────
     let spouseIncome = 0;
@@ -715,52 +681,29 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       separationPayoutDone = true;
     }
 
-    // ── Other investments: draw down liquid pools in retirement, then grow ─────────
-    // Each pool is drawn at the same rate as the TSP once retired and accessible. Deferred
-    // is ordinary income (+RMD); Roth is tax-free; taxable realizes capital gains on the
-    // gain portion only; illiquid (real estate/other) is never drawn, only grown.
-    const onlyContributeWhileWorking = stillWorking ? 1 : 0;
+    // ── Other investments: accumulation while working; retirement drawdown deferred ───
+    // Deferred = ordinary income (+RMD); Roth = tax-free; taxable = capital gains on the gain
+    // portion + annual dividend drag; illiquid (real estate/other) is never drawn, only grown.
     let otherDeferredDistribution = 0;
     let otherRothDistribution = 0;
     let otherTaxableDistribution = 0;
     let otherTaxableGains = 0;
-    if (canAccessTSP) {
-      otherDeferredDistribution = otherDeferredBalance * (effectiveWithdrawalRate / 100);
-      if (age >= rmdAge) {
-        const rmd = requiredMinimumDistribution(otherDeferredBalance, age);
-        if (rmd > otherDeferredDistribution) otherDeferredDistribution = Math.min(rmd, otherDeferredBalance);
-      }
-      otherRothDistribution = otherRothBalance * (effectiveWithdrawalRate / 100);
-      otherTaxableDistribution = otherTaxableBalance * (effectiveWithdrawalRate / 100);
-      // Realized gain portion = withdrawal × embedded unrealized-gain fraction.
-      const gainFraction = otherTaxableBalance > 0
-        ? Math.max(0, (otherTaxableBalance - otherTaxableBasis) / otherTaxableBalance)
-        : 0;
-      otherTaxableGains = otherTaxableDistribution * gainFraction;
+    let otherTaxableDividends = 0;
+    if (stillWorking) {
+      otherDeferredBalance = Math.max(0, (otherDeferredBalance + contribByCat.deferred) * (1 + deferredReturn));
+      otherRothBalance = Math.max(0, (otherRothBalance + contribByCat.roth) * (1 + rothReturn));
+      // Taxable: contributions + annual dividends (taxed, reinvested into basis), then growth.
+      const balAfter = Math.max(0, otherTaxableBalance + contribByCat.taxable);
+      otherTaxableDividends = balAfter * taxableDividendYield;
+      otherTaxableBasis = Math.max(0, otherTaxableBasis + contribByCat.taxable + otherTaxableDividends);
+      otherTaxableBalance = balAfter * (1 + taxableReturn);
     }
-    // Update pools: subtract distributions, add (working-year) contributions, then grow.
-    otherDeferredBalance = Math.max(0, (otherDeferredBalance - otherDeferredDistribution +
-      contribByCat.deferred * onlyContributeWhileWorking) * (1 + deferredReturn));
-    otherRothBalance = Math.max(0, (otherRothBalance - otherRothDistribution +
-      contribByCat.roth * onlyContributeWhileWorking) * (1 + rothReturn));
-    // Taxable account: basis tracks principal (reduced by the non-gain portion withdrawn,
-    // increased by contributions). Annual dividends/interest are taxed each year (a "tax drag"),
-    // then reinvested — so they raise the basis and are not taxed again at sale.
-    const taxablePrincipalWithdrawn = otherTaxableDistribution - otherTaxableGains;
-    const balanceAfterTaxableFlows = Math.max(0, otherTaxableBalance - otherTaxableDistribution +
-      contribByCat.taxable * onlyContributeWhileWorking);
-    const otherTaxableDividends = balanceAfterTaxableFlows * taxableDividendYield;
-    otherTaxableBasis = Math.max(0, otherTaxableBasis - taxablePrincipalWithdrawn +
-      contribByCat.taxable * onlyContributeWhileWorking + otherTaxableDividends);
-    otherTaxableBalance = balanceAfterTaxableFlows * (1 + taxableReturn);
+    // Illiquid grows every year (never drawn down).
     otherIlliquidBalance = Math.max(0, (otherIlliquidBalance +
-      contribByCat.illiquid * onlyContributeWhileWorking) * (1 + illiquidReturn));
+      (stillWorking ? contribByCat.illiquid : 0)) * (1 + illiquidReturn));
 
-    // Combined non-TSP portfolio drawdown income for this year.
-    const otherInvestmentsDistribution = otherDeferredDistribution + otherRothDistribution +
-      otherTaxableDistribution + nonFed401kDistribution;
-    // Refresh the running aggregate used by net-worth / FIRE / guardrails.
-    otherInvestmentsBalance = otherDeferredBalance + otherRothBalance + otherTaxableBalance + otherIlliquidBalance;
+    // Distribution income + running aggregate are finalized in the consolidated block below.
+    let otherInvestmentsDistribution = 0;
 
     // Calculate inflated living expenses for this year
     const yearsFromStart = age - startAge;
@@ -827,14 +770,121 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     // Calculate total debt
     const totalDebt = debts.reduce((sum, d) => sum + d.currentBalance, 0);
 
+    // ── Consolidated retirement withdrawals (primary accounts) ────────────────────
+    // Decided here, after expenses & guaranteed income are known, so the tax-optimal
+    // strategy can fund the spending gap in tax-preferred order. Tax context computed once.
+    const filingStatus: FilingStatus = spouse ? 'married' : 'single';
+    const spouseAgeThisYear = spouse ? spouseCurrentAge + (age - currentAge) : undefined;
+    const taxInflationFactor = Math.pow(1 + profile.assumptions.inflationRate / 100, Math.max(0, year - TAX_BRACKET_BASE_YEAR));
+
+    if (!stillWorking) {
+      const spouseWorkingIncome = (spouse && spouseCurrentAge + (age - currentAge) < spouseLeaveServiceAge) ? spouseCurrentIncome : 0;
+
+      if (profile.assumptions.withdrawalStrategy === 'tax_optimal' && canAccessTSP) {
+        // Mandatory RMDs from each deferred pool (taken regardless of spending need).
+        const tspRmd = age >= rmdAge ? requiredMinimumDistribution(tspTradBalance, age) : 0;
+        const nonFedRmd = age >= rmdAge ? requiredMinimumDistribution(nonFederal401kBalance, age) : 0;
+        const otherDefRmd = age >= rmdAge ? requiredMinimumDistribution(otherDeferredBalance, age) : 0;
+        const totalRmd = tspRmd + nonFedRmd + otherDefRmd;
+
+        // Income fixed before discretionary withdrawals (RMDs are ordinary income).
+        const baseOrdinary = pension + fersSupplement + otherIncome + lumpSumLeavePayout + vsipPayout +
+          spousePension + spouseTspDistribution + spouseWorkingIncome + (spouse?.retirementIncome || 0) + totalRmd;
+        const ssIncome = socialSecurity + spouseSocialSecurity;
+        const gainFraction = otherTaxableBalance > 0 ? Math.max(0, (otherTaxableBalance - otherTaxableBasis) / otherTaxableBalance) : 0;
+
+        // Pools available for discretionary withdrawal, in tax-preferred order.
+        const taxableAvail = otherTaxableBalance;
+        const deferredAvail = Math.max(0, tspTradBalance - tspRmd) + Math.max(0, nonFederal401kBalance - nonFedRmd) + Math.max(0, otherDeferredBalance - otherDefRmd);
+        const rothAvail = tspRothBalance + otherRothBalance;
+
+        // Fixed-point solve: cover expenses after tax, withdrawing taxable -> deferred -> Roth.
+        let dt = 0, dd = 0, dr = 0;
+        for (let iter = 0; iter < 6; iter++) {
+          const taxableGains = dt * gainFraction;
+          const dividends = Math.max(0, otherTaxableBalance - dt) * taxableDividendYield;
+          const tax = calculateRetirementTax({
+            ordinaryIncome: Math.max(0, baseOrdinary + dd),
+            socialSecurityIncome: Math.max(0, ssIncome),
+            filingStatus, primaryAge: age, spouseAge: spouseAgeThisYear,
+            stateTaxRate: profile.assumptions.stateTaxRate,
+            capitalGains: taxableGains + dividends, inflationFactor: taxInflationFactor,
+          }).totalTax;
+          const required = Math.max(0, totalExpenses - (baseOrdinary + ssIncome) + tax);
+          let rem = required;
+          dt = Math.min(taxableAvail, rem); rem -= dt;
+          dd = Math.min(deferredAvail, rem); rem -= dd;
+          dr = Math.min(rothAvail, rem); rem -= dr;
+        }
+
+        // Map discretionary amounts back to specific accounts (deferred order: TSP -> 401k -> IRA).
+        otherTaxableDistribution = dt;
+        let defLeft = dd;
+        const tspTradDisc = Math.min(Math.max(0, tspTradBalance - tspRmd), defLeft); defLeft -= tspTradDisc;
+        const nonFedDisc = Math.min(Math.max(0, nonFederal401kBalance - nonFedRmd), defLeft); defLeft -= nonFedDisc;
+        const otherDefDisc = Math.min(Math.max(0, otherDeferredBalance - otherDefRmd), defLeft);
+        tspTradDistribution = tspRmd + tspTradDisc;
+        nonFed401kDistribution = nonFedRmd + nonFedDisc;
+        otherDeferredDistribution = otherDefRmd + otherDefDisc;
+        let rothLeft = dr;
+        tspRothDistribution = Math.min(tspRothBalance, rothLeft); rothLeft -= tspRothDistribution;
+        otherRothDistribution = Math.min(otherRothBalance, rothLeft);
+        tspDistribution = tspTradDistribution + tspRothDistribution;
+      } else {
+        // Rate-based (fixed_percent / guardrails): each pool at the effective withdrawal rate,
+        // with an RMD floor on deferred balances. (Reproduces the original per-pool behavior.)
+        const totalTSPForDist = tspTradBalance + tspRothBalance;
+        tspDistribution = canAccessTSP ? totalTSPForDist * (effectiveWithdrawalRate / 100) : 0;
+        const rf = totalTSPForDist > 0 ? tspRothBalance / totalTSPForDist : 0;
+        tspRothDistribution = tspDistribution * rf;
+        tspTradDistribution = tspDistribution - tspRothDistribution;
+        if (canAccessTSP && age >= rmdAge) {
+          const rmd = requiredMinimumDistribution(tspTradBalance, age);
+          if (rmd > tspTradDistribution) { tspTradDistribution = Math.min(rmd, tspTradBalance); tspDistribution = tspTradDistribution + tspRothDistribution; }
+        }
+        if (canAccessTSP && nonFederal401kBalance > 0) {
+          nonFed401kDistribution = nonFederal401kBalance * (effectiveWithdrawalRate / 100);
+          if (age >= rmdAge) { const rmd = requiredMinimumDistribution(nonFederal401kBalance, age); if (rmd > nonFed401kDistribution) nonFed401kDistribution = Math.min(rmd, nonFederal401kBalance); }
+        }
+        if (canAccessTSP) {
+          otherDeferredDistribution = otherDeferredBalance * (effectiveWithdrawalRate / 100);
+          if (age >= rmdAge) { const rmd = requiredMinimumDistribution(otherDeferredBalance, age); if (rmd > otherDeferredDistribution) otherDeferredDistribution = Math.min(rmd, otherDeferredBalance); }
+          otherRothDistribution = otherRothBalance * (effectiveWithdrawalRate / 100);
+          otherTaxableDistribution = otherTaxableBalance * (effectiveWithdrawalRate / 100);
+        }
+      }
+
+      // Realized gain portion of the taxable withdrawal.
+      const gainFrac = otherTaxableBalance > 0 ? Math.max(0, (otherTaxableBalance - otherTaxableBasis) / otherTaxableBalance) : 0;
+      otherTaxableGains = otherTaxableDistribution * gainFrac;
+
+      // Apply: TSP Roth conversion (taxable), then (balance − distribution) × growth per pool.
+      const conversionAmount = Math.min(profile.tsp.rothConversionAnnual || 0, tspTradBalance);
+      tspTradBalance -= conversionAmount;
+      tspRothBalance += conversionAmount;
+      tspTradBalance = Math.max(0, (tspTradBalance - tspTradDistribution) * (1 + returnRate / 100));
+      tspRothBalance = Math.max(0, (tspRothBalance - tspRothDistribution) * (1 + returnRate / 100));
+
+      nonFederal401kBalance = Math.max(0, (nonFederal401kBalance - nonFed401kDistribution) * (1 + nonFed401kReturnRate / 100));
+
+      otherDeferredBalance = Math.max(0, (otherDeferredBalance - otherDeferredDistribution) * (1 + deferredReturn));
+      otherRothBalance = Math.max(0, (otherRothBalance - otherRothDistribution) * (1 + rothReturn));
+      const taxablePrincipalWithdrawn = otherTaxableDistribution - otherTaxableGains;
+      const balAfter = Math.max(0, otherTaxableBalance - otherTaxableDistribution);
+      otherTaxableDividends = balAfter * taxableDividendYield;
+      otherTaxableBasis = Math.max(0, otherTaxableBasis - taxablePrincipalWithdrawn + otherTaxableDividends);
+      otherTaxableBalance = balAfter * (1 + taxableReturn);
+    }
+
+    tspBalance = tspTradBalance + tspRothBalance;
+    otherInvestmentsDistribution = otherDeferredDistribution + otherRothDistribution + otherTaxableDistribution + nonFed401kDistribution;
+    otherInvestmentsBalance = otherDeferredBalance + otherRothBalance + otherTaxableBalance + otherIlliquidBalance;
+
     // Total income (pension + TSP + Social Security + FERS Supplement + other sources
     // + non-TSP portfolio drawdown + one-time separation payouts)
     const totalIncome = pension + tspDistribution + socialSecurity + fersSupplement +
       spouseIncome + otherIncome + otherInvestmentsDistribution + lumpSumLeavePayout + vsipPayout;
 
-    // Net income (after expenses and taxes) — progressive federal + optional state tax
-    const filingStatus: FilingStatus = spouse ? 'married' : 'single';
-    const spouseAgeThisYear = spouse ? spouseCurrentAge + (age - currentAge) : undefined;
     // Ordinary income: Traditional pension/TSP are taxable; Roth TSP distributions are NOT.
     // Roth conversions ARE taxable in the year of conversion. Earned income (part-time/
     // Barista-FIRE wages and side-hustle/self-employment) is fully taxable ordinary income.
@@ -849,8 +899,6 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       (spouse && spouseCurrentAge + (age - currentAge) < spouseLeaveServiceAge ? spouseCurrentIncome : 0) +
       (spouse?.retirementIncome || 0);
     const totalSSIncome = socialSecurity + spouseSocialSecurity;
-    // Inflation-index the 2024 brackets/standard deduction to this projection year.
-    const taxInflationFactor = Math.pow(1 + profile.assumptions.inflationRate / 100, Math.max(0, year - TAX_BRACKET_BASE_YEAR));
     const taxResult = calculateRetirementTax({
       ordinaryIncome: Math.max(0, ordinaryIncome),
       socialSecurityIncome: Math.max(0, totalSSIncome),

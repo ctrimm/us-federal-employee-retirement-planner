@@ -177,8 +177,9 @@ Still open:
 - [ ] **FEHB suspend → Medicare Advantage / TRICARE** option, including TRICARE time counting
   toward the 5-year FEHB rule.
 - [ ] **IRMAA refinements**: 2-year MAGI lookback and Part D surcharge.
-- [ ] **Per-account drawdown ordering** strategy (e.g. taxable → deferred → Roth) instead of a
-  uniform withdrawal rate across pools.
+- [x] **Tax-optimal per-account drawdown ordering**: a third withdrawal strategy that funds the
+  spending gap from taxable → tax-deferred → Roth (RMDs first) with a fixed-point tax gross-up.
+  _Remaining:_ multi-year global optimization and folding the spouse's TSP into the household order.
 
 ### User Experience
 

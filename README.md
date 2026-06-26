@@ -132,15 +132,17 @@ Guaranteed income includes pension, FERS supplement, and Social Security. Non-li
 - **FERS Supplement:** eligibility, age-62 scaling, earnings test (with special-provision exemption to MRA)
 - **Income:** pension, Social Security (provisional-income taxation, WEP), TSP (Traditional/Roth, Rule of 55, Roth conversions), **whole-portfolio drawdown** of non-federal 401k + IRA/401k/brokerage/Roth taxed by type, **RMDs (73/75)**, part-time/Barista & side-hustle, spouse modeling, lump-sum annual leave, VSIP
 - **Taxes:** progressive 2024 brackets **inflation-indexed**, standard + age-65 deduction, **long-term capital gains (0/15/20%)**, dividend/interest drag, optional state tax, **Medicare Part B + IRMAA**
-- **Other:** guardrails withdrawals, FIRE tiers + CoastFIRE, debts/assets/college/life-events, **separation-month proration**, charts (income, expenses, **taxes**, TSP, net worth) with toggleable series
+- **Withdrawal strategies:** fixed-percent, guardrails (±10% in an 80–120% band), and **tax-optimal ordering** (fund the spending gap from taxable → tax-deferred → Roth, RMDs first, with a fixed-point tax gross-up)
+- **Special provisions:** primary **and spouse** (LEO/firefighter/ATC) — 1.7%/1.0% accrual + immediate COLA
+- **Other:** FIRE tiers + CoastFIRE, debts/assets/college/life-events, **separation-month proration**, charts (income, expenses, **taxes**, TSP, net worth) with toggleable series
 
 **🔜 Planned / not yet modeled**
 
 - Bridge health coverage (COBRA/ACA) cost during a postponed-annuity FEHB gap; FEHB suspend → Medicare Advantage / TRICARE
 - IRMAA refinements (2-year MAGI lookback, Part D surcharge)
-- Tax-optimal **per-account withdrawal ordering** (currently a uniform rate across pools)
 - Per-account cost-basis input in the account editor (engine supports it; UI uses a default)
-- Special provisions for a **spouse**, and exact enforcement of mandatory retirement ages
+- Exact enforcement of mandatory retirement ages (currently surfaced as guidance)
+- Bringing the **spouse's TSP** into the tax-optimal household withdrawal order (currently drawn at a fixed rate)
 
 ---
 
@@ -153,7 +155,7 @@ Guaranteed income includes pension, FERS supplement, and Social Security. Non-li
 | Healthcare inflation | 5.0% | Applied to FEHB premiums |
 | TSP return | 6.5% | Applied to TSP balance |
 | TSP drawdown | 4.0% | % of balance withdrawn per year |
-| Withdrawal strategy | Fixed percent | Can switch to guardrails (80-120% band) |
+| Withdrawal strategy | Fixed percent | Or guardrails (80–120% band), or tax-optimal ordering |
 | LeanFIRE multiplier | 75% | Minimum spending tier |
 | ChubbyFIRE multiplier | 125% | Comfortable spending tier |
 | FatFIRE multiplier | 150% | Luxury spending tier |
@@ -186,6 +188,7 @@ Guaranteed income includes pension, FERS supplement, and Social Security. Non-li
 - State tax is an optional flat rate on ordinary income + taxable SS + capital gains (excludes the non-taxable SS portion and Roth distributions); it does not model state-specific pension exemptions.
 
 **Known simplifications:**
+- The **tax-optimal** strategy is a single-year greedy ordering (taxable → tax-deferred → Roth, RMDs first) solved with a fixed-point tax gross-up; it is not a multi-year global optimization, and the spouse's TSP is still drawn at a fixed rate rather than folded into the household order.
 - IRMAA uses the current year's MAGI (the real program uses a 2-year lookback) and models the Part B surcharge (not Part D).
 - Social Security benefit estimate is an approximation — actual benefit requires an SSA earnings record. CSRS service earns no SS.
 - Taxable-account dividends are treated as qualified (LTCG rates); savings-account interest is not separately taxed as ordinary income.
