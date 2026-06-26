@@ -112,6 +112,9 @@ export interface RetirementInfo {
   postponeRetirement?: boolean;
   // Lump-sum annual leave: unused hours paid out at separation, at the final hourly salary rate.
   annualLeaveHoursAtRetirement?: number;
+  // Separation month (1-12). FERS annuity begins the first of the *next* month, so the first
+  // year's annuity is prorated. Undefined = treat as a full first year.
+  retirementMonth?: number;
   // VERA / VSIP early-out
   earlyOutVERA?: boolean; // Voluntary Early Retirement Authority — immediate unreduced annuity
   vsipAmount?: number; // Voluntary Separation Incentive Payment — one-time taxable payment at separation
@@ -151,6 +154,7 @@ export interface OtherAccount {
   name: string;
   type: OtherAccountType;
   currentBalance: number;
+  costBasis?: number; // Taxable accounts: amount already taxed (defaults to an estimated embedded gain)
   annualContribution?: number;
   returnAssumption?: number;
   taxDeferred?: boolean; // For IRAs, 401ks
@@ -172,6 +176,7 @@ export interface AssumptionsInfo {
   applyExpensesFromCurrentAge?: boolean; // Start expenses at current age instead of retirement
   expenseInflationRate?: number; // Rate to inflate expenses (defaults to inflationRate)
   stateTaxRate?: number; // Optional flat state income tax rate (e.g. 5 for 5%)
+  taxableDividendYield?: number; // Annual dividend/interest yield on taxable accounts (%, default 2)
   // Withdrawal strategy
   withdrawalStrategy?: 'fixed_percent' | 'guardrails'; // Default fixed_percent
   guardrailsLowerPct?: number; // Portfolio % of initial that triggers spending cut (default 80)
@@ -404,6 +409,9 @@ export const SS_AGE62_TO_FRA_RATIO = 0.70;
 export const SS_ANNUAL_EARNINGS_LIMIT = 22_320;
 // Standard federal work hours in a year (used for sick/annual leave hour→year conversions).
 export const STANDARD_WORK_HOURS_PER_YEAR = 2087;
+// Default cost basis for a taxable brokerage account when not specified: assume ~25% of the
+// current balance is embedded (untaxed) gain (basis = 75% of balance).
+export const DEFAULT_TAXABLE_BASIS_FRACTION = 0.75;
 export const LEAN_FIRE_MULTIPLIER = 0.75;   // LeanFIRE: 75% of base living expenses
 export const CHUBBY_FIRE_MULTIPLIER = 1.25; // ChubbyFIRE: 125% of base living expenses
 export const FAT_FIRE_MULTIPLIER = 1.50;    // FatFIRE: 150% of base living expenses

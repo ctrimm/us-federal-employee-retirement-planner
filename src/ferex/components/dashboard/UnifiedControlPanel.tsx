@@ -207,6 +207,9 @@ export function UnifiedControlPanel({
   const [annualLeaveHours, setAnnualLeaveHours] = useState(
     profile.retirement.annualLeaveHoursAtRetirement || 0
   );
+  const [retirementMonth, setRetirementMonth] = useState(
+    profile.retirement.retirementMonth || 12
+  );
   const [earlyOutVERA, setEarlyOutVERA] = useState(
     profile.retirement.earlyOutVERA || false
   );
@@ -416,6 +419,7 @@ export function UnifiedControlPanel({
         sideHustleIncome,
         postponeRetirement,
         annualLeaveHoursAtRetirement: annualLeaveHours,
+        retirementMonth,
         earlyOutVERA,
         vsipAmount,
       },
@@ -878,6 +882,25 @@ export function UnifiedControlPanel({
                     />
                     <p className="text-xs text-muted-foreground mt-1">
                       Paid as a lump sum at your final hourly rate in the year you separate (taxable). Most feds carry up to 240 hours.
+                    </p>
+                  </div>
+
+                  {/* Separation month */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Separation Month: {['', 'Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][retirementMonth]}
+                    </label>
+                    <input
+                      type="range"
+                      min={1}
+                      max={12}
+                      step={1}
+                      value={retirementMonth}
+                      onChange={(e) => setRetirementMonth(parseInt(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Your FERS annuity begins the first of the month after you separate, so the first year is prorated. December = a full first year next January.
                     </p>
                   </div>
 

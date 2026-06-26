@@ -26,7 +26,7 @@ import { calculateRetirementTax, TAX_BRACKET_BASE_YEAR } from './taxCalculator';
 import type { FilingStatus } from './taxCalculator';
 import {
   MEDICARE_PART_B_MONTHLY_2024, LEAN_FIRE_MULTIPLIER, CHUBBY_FIRE_MULTIPLIER, FAT_FIRE_MULTIPLIER,
-  SS_AGE62_TO_FRA_RATIO, SS_ANNUAL_EARNINGS_LIMIT, STANDARD_WORK_HOURS_PER_YEAR,
+  SS_AGE62_TO_FRA_RATIO, SS_ANNUAL_EARNINGS_LIMIT, STANDARD_WORK_HOURS_PER_YEAR, DEFAULT_TAXABLE_BASIS_FRACTION,
 } from '../types';
 
 /**
@@ -84,6 +84,35 @@ export function determineEligibility(profile: UserProfile): EligibilityInfo {
     totalYearsOfService: totalYears,
     detectedSystem,
   };
+}
+
+// 2024 Medicare Part B IRMAA tiers: MAGI upper bound (single / married) → monthly surcharge
+// above the standard premium. (Based on MAGI; the real program uses a 2-year lookback.)
+const IRMAA_PARTB_TIERS = [
+  { single: 103_000, married: 206_000, monthlySurcharge: 0 },
+  { single: 129_000, married: 258_000, monthlySurcharge: 69.90 },
+  { single: 161_000, married: 322_000, monthlySurcharge: 174.70 },
+  { single: 193_000, married: 386_000, monthlySurcharge: 279.50 },
+  { single: 500_000, married: 750_000, monthlySurcharge: 384.30 },
+  { single: Infinity, married: Infinity, monthlySurcharge: 419.30 },
+];
+
+/**
+ * Annual Medicare Part B IRMAA surcharge (one person) given modified AGI.
+ * MAGI thresholds are inflation-indexed (CPI); the surcharge amount grows with healthcare
+ * inflation, consistent with the base Part B premium. Returns the per-person annual surcharge.
+ */
+function partBIrmaaAnnual(
+  magi: number,
+  filingStatus: 'single' | 'married',
+  thresholdFactor: number,
+  surchargeFactor: number
+): number {
+  for (const tier of IRMAA_PARTB_TIERS) {
+    const bound = (filingStatus === 'married' ? tier.married : tier.single) * thresholdFactor;
+    if (magi <= bound) return tier.monthlySurcharge * 12 * surchargeFactor;
+  }
+  return IRMAA_PARTB_TIERS[IRMAA_PARTB_TIERS.length - 1].monthlySurcharge * 12 * surchargeFactor;
 }
 
 /**
@@ -212,6 +241,14 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
   // Age at which Traditional TSP RMDs begin (SECURE 2.0: 73 or 75 by birth year).
   const rmdAge = rmdStartAge(profile.personal.birthYear);
 
+  // FERS annuity begins the first of the month after separation, so a mid-year separation
+  // prorates the first year's annuity. A December (or unspecified) separation is treated as a
+  // full first year — the annuity simply begins the following January.
+  const retirementMonth = profile.retirement.retirementMonth;
+  const firstYearAnnuityFraction = (retirementMonth && retirementMonth < 12)
+    ? Math.max(0, Math.min(1, (12 - retirementMonth) / 12))
+    : 1;
+
   // VERA early-out: eligible at age 50 with 20+ years, or any age with 25+ years.
   const mraForSupplement = calculateMRA(profile.personal.birthYear);
   const veraEligibleForSupplement = profile.retirement.earlyOutVERA === true &&
@@ -297,14 +334,21 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     const bal = a.currentBalance || 0;
     if (cat === 'deferred') otherDeferredBalance += bal;
     else if (cat === 'roth') otherRothBalance += bal;
-    else if (cat === 'taxable') { otherTaxableBalance += bal; otherTaxableBasis += bal; }
-    else otherIlliquidBalance += bal;
+    else if (cat === 'taxable') {
+      otherTaxableBalance += bal;
+      // Cost basis: use the entered value, else assume savings is all principal and a
+      // brokerage carries an estimated embedded gain (basis < balance).
+      const basis = a.costBasis != null ? a.costBasis
+        : (a.type === 'savings' ? bal : bal * DEFAULT_TAXABLE_BASIS_FRACTION);
+      otherTaxableBasis += basis;
+    } else otherIlliquidBalance += bal;
   }
   // Fallback: a bare totalBalance with no account detail is treated as a taxable brokerage account.
   if (otherAccounts.length === 0 && (profile.otherInvestments?.totalBalance || 0) > 0) {
     otherTaxableBalance = profile.otherInvestments!.totalBalance!;
-    otherTaxableBasis = otherTaxableBalance;
+    otherTaxableBasis = otherTaxableBalance * DEFAULT_TAXABLE_BASIS_FRACTION;
   }
+  const taxableDividendYield = (profile.assumptions.taxableDividendYield ?? 2) / 100;
   // Running aggregate (used by net-worth, FIRE, and guardrails references).
   let otherInvestmentsBalance = otherDeferredBalance + otherRothBalance + otherTaxableBalance + otherIlliquidBalance;
 
@@ -400,13 +444,15 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
 
     // Calculate pension with the correct COLA schedule (only if claiming).
     // FERS receives the diet COLA and no COLA before age 62; CSRS receives full CPI COLA.
-    const pension = hasPension ? calculatePensionWithColaSchedule(
+    let pension = hasPension ? calculatePensionWithColaSchedule(
       basePension,
       primarySystem,
       age,
       claimPensionAge,
       profile.assumptions.colaRate
     ) : 0;
+    // First annuity year is prorated for the separation-month / "first of next month" gap.
+    if (hasPension && age === claimPensionAge) pension *= firstYearAnnuityFraction;
 
     // ── Guardrails: compute effective withdrawal rate ─────────────────────────
     // Record portfolio base at the moment of retirement
@@ -478,6 +524,8 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       veraEligibleForSupplement,
       mraForSupplement
     );
+    // Prorate the supplement's first year for the separation-month gap (same as the annuity).
+    if (fersSupplement > 0 && age === claimPensionAge) fersSupplement *= firstYearAnnuityFraction;
 
     // Calculate FEHB cost. FEHB requires the annuity to be in payment, so for a POSTPONED
     // retirement (claim age > leave age) coverage is suspended during the gap and reinstated
@@ -665,12 +713,16 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       contribByCat.deferred * onlyContributeWhileWorking) * (1 + deferredReturn));
     otherRothBalance = Math.max(0, (otherRothBalance - otherRothDistribution +
       contribByCat.roth * onlyContributeWhileWorking) * (1 + rothReturn));
-    // Taxable basis tracks the principal: reduced by the non-gain portion withdrawn, increased by contributions.
+    // Taxable account: basis tracks principal (reduced by the non-gain portion withdrawn,
+    // increased by contributions). Annual dividends/interest are taxed each year (a "tax drag"),
+    // then reinvested — so they raise the basis and are not taxed again at sale.
     const taxablePrincipalWithdrawn = otherTaxableDistribution - otherTaxableGains;
-    otherTaxableBasis = Math.max(0, otherTaxableBasis - taxablePrincipalWithdrawn +
+    const balanceAfterTaxableFlows = Math.max(0, otherTaxableBalance - otherTaxableDistribution +
       contribByCat.taxable * onlyContributeWhileWorking);
-    otherTaxableBalance = Math.max(0, (otherTaxableBalance - otherTaxableDistribution +
-      contribByCat.taxable * onlyContributeWhileWorking) * (1 + taxableReturn));
+    const otherTaxableDividends = balanceAfterTaxableFlows * taxableDividendYield;
+    otherTaxableBasis = Math.max(0, otherTaxableBasis - taxablePrincipalWithdrawn +
+      contribByCat.taxable * onlyContributeWhileWorking + otherTaxableDividends);
+    otherTaxableBalance = balanceAfterTaxableFlows * (1 + taxableReturn);
     otherIlliquidBalance = Math.max(0, (otherIlliquidBalance +
       contribByCat.illiquid * onlyContributeWhileWorking) * (1 + illiquidReturn));
 
@@ -776,9 +828,29 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       primaryAge: age,
       spouseAge: spouseAgeThisYear,
       stateTaxRate: profile.assumptions.stateTaxRate,
-      capitalGains: otherTaxableGains,
+      // Realized gains at sale + annual qualified dividends/interest, both taxed at LTCG rates.
+      capitalGains: otherTaxableGains + otherTaxableDividends,
       inflationFactor: taxInflationFactor,
     });
+
+    // ── Medicare Part B IRMAA surcharge (high-income) ─────────────────────────────
+    // Based on modified AGI (here: federal AGI + realized gains). Each Medicare-enrolled
+    // person in the household pays their own surcharge based on the household MAGI.
+    const magi = Math.max(0, ordinaryIncome + taxResult.taxableSSBenefit + Math.max(0, otherTaxableGains + otherTaxableDividends));
+    const irmaaSurchargeFactor = Math.pow(1 + profile.assumptions.healthcareInflation / 100, Math.max(0, year - 2024));
+    let irmaaSurcharge = 0;
+    if (age >= 65 && !stillWorking) {
+      irmaaSurcharge += partBIrmaaAnnual(magi, filingStatus, taxInflationFactor, irmaaSurchargeFactor);
+    }
+    if (spouse) {
+      const spAge = spouseCurrentAge + (age - currentAge);
+      if (spAge >= 65 && spAge >= spouseLeaveServiceAge) {
+        irmaaSurcharge += partBIrmaaAnnual(magi, filingStatus, taxInflationFactor, irmaaSurchargeFactor);
+      }
+    }
+    medicarePremium += irmaaSurcharge;
+    totalExpenses += irmaaSurcharge;
+
     const netIncome = totalIncome - totalExpenses - taxResult.totalTax;
 
     // ── FIRE metrics ──────────────────────────────────────────────────────────

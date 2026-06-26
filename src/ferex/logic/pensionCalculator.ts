@@ -64,6 +64,15 @@ export function calculateFERSPension(
 }
 
 /**
+ * CSRS survivor-annuity cost: the annuitant's reduction is 2.5% of the first $3,600 of the
+ * unreduced annuity plus 10% of the amount above $3,600 (returns the annual dollar reduction).
+ */
+export function csrsSurvivorReductionAmount(unreducedAnnual: number): number {
+  if (unreducedAnnual <= 0) return 0;
+  return 0.025 * Math.min(unreducedAnnual, 3600) + 0.10 * Math.max(0, unreducedAnnual - 3600);
+}
+
+/**
  * Calculate CSRS annual pension
  * CSRS has tiered accrual rates:
  * - 1.5% for first 5 years
@@ -93,10 +102,9 @@ export function calculateCSRSPension(
     annualPension += high3 * CSRS_ACCRUAL_RATES.beyond10Years * beyond10;
   }
 
-  // Apply survivor annuity reduction if elected
+  // Apply survivor annuity reduction if elected (CSRS uses the 2.5%/10% cost formula).
   if (survivorAnnuityType === 'standard' || survivorAnnuityType === 'courtOrdered') {
-    const reduction = SURVIVOR_ANNUITY_REDUCTION.standard;
-    annualPension *= (1 - reduction);
+    annualPension -= csrsSurvivorReductionAmount(annualPension);
   }
 
   return annualPension;
@@ -202,11 +210,17 @@ export function calculateAnnualPension(profile: UserProfile): PensionBreakdown {
     }
   }
 
-  // Calculate survivor reduction amount
-  const survivorReduction =
-    profile.retirement.survivorAnnuityType !== 'none'
-      ? SURVIVOR_ANNUITY_REDUCTION.standard
-      : 0;
+  // Calculate the effective survivor-reduction fraction (for display).
+  // CSRS uses the 2.5%/10% cost formula; FERS/mixed use the flat 10%.
+  let survivorReduction = 0;
+  if (profile.retirement.survivorAnnuityType !== 'none') {
+    if (csrsYears > 0 && fersYears === 0) {
+      const unreduced = calculateCSRSPension(high3, csrsYears, 'none');
+      survivorReduction = unreduced > 0 ? csrsSurvivorReductionAmount(unreduced) / unreduced : 0;
+    } else {
+      survivorReduction = SURVIVOR_ANNUITY_REDUCTION.standard;
+    }
+  }
 
   return {
     high3,
@@ -304,25 +318,31 @@ export function calculateSpouseAnnualPension(spouse: SpouseInfo): number {
 }
 
 /**
- * Calculate survivor benefit amount (what spouse receives)
+ * Calculate survivor benefit amount (what the surviving spouse receives).
+ * FERS: 50% of the unreduced annuity. CSRS: up to 55% of the unreduced annuity.
  */
 export function calculateSurvivorBenefit(
   annualPension: number,
-  survivorAnnuityType: string
+  survivorAnnuityType: string,
+  system: 'FERS' | 'CSRS' = 'FERS'
 ): number {
-  if (survivorAnnuityType === 'standard') {
-    // FERS survivor receives 50% of the unreduced annuity (the most common election).
-    // (CSRS allows up to 55%; this engine treats survivor benefits with the FERS 50%
-    // standard for simplicity — see README "Known simplifications".)
-    const unreducedPension = annualPension / (1 - SURVIVOR_ANNUITY_REDUCTION.standard);
-    return unreducedPension * 0.5;
+  if (survivorAnnuityType !== 'standard' && survivorAnnuityType !== 'courtOrdered') return 0;
+
+  const survivorShare = system === 'CSRS' ? 0.55 : 0.50;
+
+  if (system === 'CSRS') {
+    // Reconstruct the unreduced annuity from the post-reduction amount (2.5%/10% formula).
+    // reduction = 0.025·min(U,3600) + 0.10·max(0,U-3600); for U>3600 this is a constant $90
+    // plus 10% of (U-3600), so U = (annual + 90 - 360) / 0.9 = (annual - 270) / 0.9 when U>3600.
+    const unreduced = annualPension > (3600 - csrsSurvivorReductionAmount(3600))
+      ? (annualPension - 270) / 0.9
+      : annualPension / 0.975;
+    return Math.max(0, unreduced) * survivorShare;
   }
 
-  if (survivorAnnuityType === 'courtOrdered') {
-    // Court-ordered can vary; default to similar calculation
-    const unreducedPension = annualPension / (1 - SURVIVOR_ANNUITY_REDUCTION.courtOrdered);
-    return unreducedPension * 0.5;
-  }
-
-  return 0;
+  const reduction = survivorAnnuityType === 'courtOrdered'
+    ? SURVIVOR_ANNUITY_REDUCTION.courtOrdered
+    : SURVIVOR_ANNUITY_REDUCTION.standard;
+  const unreducedPension = annualPension / (1 - reduction);
+  return unreducedPension * survivorShare;
 }

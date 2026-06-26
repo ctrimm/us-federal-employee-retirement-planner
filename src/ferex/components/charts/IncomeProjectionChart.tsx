@@ -3,6 +3,7 @@
  * Stacked area chart showing pension, TSP, social security over time
  */
 
+import { useState } from 'react';
 import {
   AreaChart,
   Area,
@@ -24,6 +25,15 @@ interface IncomeProjectionChartProps {
 }
 
 export function IncomeProjectionChart({ projections, syncedAge, onAgeHover }: IncomeProjectionChartProps) {
+  // Series the user has toggled off (click a legend item to show/hide it)
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const toggle = (name: string) =>
+    setHidden((prev) => {
+      const next = new Set(prev);
+      next.has(name) ? next.delete(name) : next.add(name);
+      return next;
+    });
+
   // Transform data for chart
   const chartData = projections.map((p) => ({
     age: p.age,
@@ -32,6 +42,7 @@ export function IncomeProjectionChart({ projections, syncedAge, onAgeHover }: In
     'FERS Supplement': p.fersSupplement,
     'Social Security': p.socialSecurity,
     'Part-Time Work': p.otherIncome,
+    'Other Investments': p.otherInvestmentsDistribution || 0,
   }));
 
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -91,6 +102,10 @@ export function IncomeProjectionChart({ projections, syncedAge, onAgeHover }: In
             <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8} />
             <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.2} />
           </linearGradient>
+          <linearGradient id="colorOtherInv" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="#ec4899" stopOpacity={0.8} />
+            <stop offset="95%" stopColor="#ec4899" stopOpacity={0.2} />
+          </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
         <XAxis
@@ -102,7 +117,12 @@ export function IncomeProjectionChart({ projections, syncedAge, onAgeHover }: In
           label={{ value: 'Annual Income', angle: -90, position: 'insideLeft' }}
         />
         <Tooltip content={<CustomTooltip />} />
-        <Legend />
+        <Legend
+          onClick={(e: any) => toggle(String(e.dataKey ?? e.value))}
+          formatter={(value: string) => (
+            <span style={{ cursor: 'pointer', opacity: hidden.has(value) ? 0.4 : 1 }}>{value}</span>
+          )}
+        />
         {syncedAge && (
           <ReferenceLine
             x={syncedAge}
@@ -118,6 +138,7 @@ export function IncomeProjectionChart({ projections, syncedAge, onAgeHover }: In
           stackId="1"
           stroke="#3b82f6"
           fill="url(#colorPension)"
+          hide={hidden.has('Pension')}
         />
         <Area
           type="monotone"
@@ -125,6 +146,7 @@ export function IncomeProjectionChart({ projections, syncedAge, onAgeHover }: In
           stackId="1"
           stroke="#10b981"
           fill="url(#colorTSP)"
+          hide={hidden.has('TSP')}
         />
         <Area
           type="monotone"
@@ -132,6 +154,7 @@ export function IncomeProjectionChart({ projections, syncedAge, onAgeHover }: In
           stackId="1"
           stroke="#06b6d4"
           fill="url(#colorFERSSupp)"
+          hide={hidden.has('FERS Supplement')}
         />
         <Area
           type="monotone"
@@ -139,6 +162,7 @@ export function IncomeProjectionChart({ projections, syncedAge, onAgeHover }: In
           stackId="1"
           stroke="#f59e0b"
           fill="url(#colorSS)"
+          hide={hidden.has('Social Security')}
         />
         <Area
           type="monotone"
@@ -146,6 +170,15 @@ export function IncomeProjectionChart({ projections, syncedAge, onAgeHover }: In
           stackId="1"
           stroke="#8b5cf6"
           fill="url(#colorOther)"
+          hide={hidden.has('Part-Time Work')}
+        />
+        <Area
+          type="monotone"
+          dataKey="Other Investments"
+          stackId="1"
+          stroke="#ec4899"
+          fill="url(#colorOtherInv)"
+          hide={hidden.has('Other Investments')}
         />
       </AreaChart>
     </ResponsiveContainer>

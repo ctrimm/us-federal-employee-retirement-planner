@@ -163,14 +163,21 @@ the implemented ones under **⚙️ Advanced Federal Strategies** in the control
   deposit is marked paid.
 - [x] **VERA / VSIP early-out**: immediate unreduced annuity (supplement from MRA) plus an
   optional one-time VSIP payment.
+- [x] **Retirement-month proration**: separation month prorates the first annuity year
+  (FERS "first of the month after separation").
+- [x] **Whole-portfolio drawdown & taxation**: TSP, non-federal 401k, and other accounts drawn
+  in retirement and taxed by type (ordinary / Roth tax-free / LTCG); RMDs; capital-gains tax.
+- [x] **Medicare IRMAA** Part B surcharge by MAGI tier.
+- [x] **CSRS survivor** 55% benefit with the 2.5%/10% cost formula.
 
 Still open:
 
-- [ ] **Retirement-month modeling**: tune the exact separation month to capture the leave-year
-  tax shift and the FERS "first of the month after separation" annuity-start gap.
 - [ ] **Bridge health coverage** (COBRA/ACA) cost during a postponed-annuity FEHB gap.
 - [ ] **FEHB suspend → Medicare Advantage / TRICARE** option, including TRICARE time counting
   toward the 5-year FEHB rule.
+- [ ] **IRMAA refinements**: 2-year MAGI lookback and Part D surcharge.
+- [ ] **Per-account drawdown ordering** strategy (e.g. taxable → deferred → Roth) instead of a
+  uniform withdrawal rate across pools.
 
 ### User Experience
 

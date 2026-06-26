@@ -127,8 +127,11 @@ Guaranteed income includes pension, FERS supplement, and Social Security. Non-li
 | State tax | 0% | Optional flat rate on ordinary income + taxable SS + gains (excludes Roth) |
 | Social Security | 30% of High-3 | Conservative WEP-adjusted estimate (FERS only) |
 | Medicare Part B | $174.70/mo (2024) | Starts at age 65 once not working; grows with healthcare inflation |
+| Medicare IRMAA | By MAGI tier | High-income Part B surcharge, inflation-indexed, per enrolled person |
 | RMDs | Age 73 / 75 | Forced taxable Traditional TSP/IRA/401k distributions (Uniform Lifetime Table) |
 | Account drawdown | Withdrawal rate | TSP + non-fed 401k + other accounts drawn and taxed by type; real estate not auto-drawn |
+| Dividend yield | 2% | Annual taxable dividend/interest drag on taxable accounts (adjustable) |
+| Separation month | December | Prorates the first annuity year (FERS starts first of next month) |
 | Life expectancy | 85 | Adjustable in profile |
 
 **What's modeled (income & taxes):**
@@ -141,14 +144,18 @@ Guaranteed income includes pension, FERS supplement, and Social Security. Non-li
 - Federal tax uses **2024 progressive brackets** (single/MFJ) with the standard deduction + age-65 addition ($1,950 single / $1,550 each married). Brackets, the standard deduction, and the LTCG breakpoints are **inflation-indexed** to each projection year (the SS provisional-income thresholds are not — they are fixed in statute).
 - Social Security taxation phases in per the IRS worksheet (lesser-of computation), capped at 85% of benefits.
 - **Required Minimum Distributions** begin at age 73 (born ≤1959) or 75 (born 1960+) using the IRS Uniform Lifetime Table, forcing taxable income from Traditional TSP/IRA/401k balances even at low drawdown rates. Roth has no RMD.
+- **Medicare Part B IRMAA** high-income surcharges are applied by MAGI tier (inflation-indexed) for each Medicare-enrolled person.
+- **Taxable accounts** carry a cost basis (entered, or an estimated embedded gain by default) and throw off an annual **dividend/interest tax drag** (default 2% yield, taxed at LTCG rates and reinvested into basis); withdrawals realize the remaining gain.
+- **CSRS survivor** annuity uses the CSRS 2.5%/10% cost formula and a 55% survivor benefit (FERS uses 10% / 50%).
+- **Separation month** prorates the first year's annuity (FERS annuity starts the first of the next month); a December separation is a full first year.
 - State tax is an optional flat rate on ordinary income + taxable SS + capital gains (excludes the non-taxable SS portion and Roth distributions); it does not model state-specific pension exemptions.
 
 **Known simplifications:**
-- **IRMAA** (high-income Medicare Part B/D surcharges) is not modeled.
+- IRMAA uses the current year's MAGI (the real program uses a 2-year lookback) and models the Part B surcharge (not Part D).
 - Social Security benefit estimate is an approximation — actual benefit requires an SSA earnings record. CSRS service earns no SS.
-- Taxable-account **cost basis** is assumed to equal the entered current balance (so only post-projection growth is treated as a capital gain) — conservative when real embedded gains are larger. Taxable-account growth is taxed on withdrawal (as gains realized), not as annual dividend/interest drag.
+- Taxable-account dividends are treated as qualified (LTCG rates); savings-account interest is not separately taxed as ordinary income.
 - FEHB premiums are community-rated (no age surcharge); FEHB↔Medicare coordination isn't modeled as a premium reduction.
-- CSRS survivor annuity uses the same 10% reduction / 50% survivor benefit as the FERS standard election (CSRS actually allows up to 55%).
+- Mixed CSRS/FERS survivor reductions use the FERS flat 10% (pure-CSRS uses the exact CSRS formula).
 
 ---
 
