@@ -618,7 +618,7 @@ export function ComprehensiveOnboarding({
                   max="10"
                   step="0.5"
                   value={tspReturnRate}
-                  onChange={(e) => setTspReturnRate(parseFloat(e.target.value))}
+                  onChange={(e) => setTSPReturnRate(parseFloat(e.target.value))}
                   className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
                 />
                 <div className="flex justify-between text-xs text-gray-500 mt-1">

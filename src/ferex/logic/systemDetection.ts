@@ -3,9 +3,31 @@
  * Determines FERS vs CSRS based on service history
  */
 
-import type { ServicePeriod, RetirementSystem } from '../types';
+import type { ServicePeriod, RetirementSystem, EmploymentInfo, SpecialProvisionType } from '../types';
+import { STANDARD_WORK_HOURS_PER_YEAR } from '../types';
 
 const FERS_START_DATE = new Date('1984-01-01');
+
+/**
+ * Return the creditable service periods including a synthetic period for bought-back
+ * military service. Active-duty military time counts toward FERS service (annuity and
+ * eligibility) only if the employee pays the military deposit. Modeled as FERS service.
+ */
+export function creditableServicePeriods(employment: EmploymentInfo): ServicePeriod[] {
+  const years = employment.militaryDepositPaid ? (employment.militaryServiceYears || 0) : 0;
+  if (years <= 0) return employment.servicePeriods;
+
+  const start = new Date(2000, 0, 1);
+  const end = new Date(start.getTime() + years * 365.25 * 24 * 60 * 60 * 1000);
+  const military: ServicePeriod = {
+    id: 'military-buyback',
+    startDate: start,
+    endDate: end,
+    system: 'FERS',
+    isActive: false,
+  };
+  return [...employment.servicePeriods, military];
+}
 
 /**
  * Automatically detect retirement system based on start date
@@ -40,8 +62,7 @@ export function calculateTotalService(periods: ServicePeriod[]): number {
  * ~2,087 hours of sick leave = 1 year of service credit (40hrs/week * 52.14 weeks)
  */
 export function calculateSickLeaveCredit(sickLeaveHours: number): number {
-  const HOURS_PER_YEAR = 2087; // Standard work hours per year
-  return sickLeaveHours / HOURS_PER_YEAR;
+  return sickLeaveHours / STANDARD_WORK_HOURS_PER_YEAR;
 }
 
 /**
@@ -66,11 +87,13 @@ export function calculateServiceBySystem(
 ): {
   fersYears: number;
   csrsYears: number;
+  specialYears: number;
   totalYears: number;
   sickLeaveCredit: number;
 } {
   let fersYears = 0;
   let csrsYears = 0;
+  let specialYears = 0;
 
   for (const period of periods) {
     const start = new Date(period.startDate);
@@ -83,6 +106,7 @@ export function calculateServiceBySystem(
 
     if (system === 'FERS') {
       fersYears += years;
+      if (period.specialProvision) specialYears += years;
     } else if (system === 'CSRS') {
       csrsYears += years;
     }
@@ -104,9 +128,28 @@ export function calculateServiceBySystem(
   return {
     fersYears,
     csrsYears,
+    specialYears,
     totalYears: fersYears + csrsYears,
     sickLeaveCredit,
   };
+}
+
+/**
+ * Resolve the number of FERS years covered under special provisions.
+ * Explicit per-period `specialProvision` flags take precedence; otherwise a profile-level
+ * `specialProvisionType` treats all (non-military) FERS service as covered.
+ */
+export function resolveSpecialYears(
+  source: { servicePeriods?: ServicePeriod[]; specialProvisionType?: SpecialProvisionType },
+  fersYearsExcludingMilitary: number,
+  specialYearsFromPeriods: number
+): number {
+  const anyFlagged = (source.servicePeriods || []).some((p) => p.specialProvision);
+  if (anyFlagged) return specialYearsFromPeriods;
+  if (source.specialProvisionType && source.specialProvisionType !== 'none') {
+    return fersYearsExcludingMilitary;
+  }
+  return 0;
 }
 
 /**
@@ -188,16 +231,25 @@ export function calculateEarliestRetirementAge(
 }
 
 /**
- * Check FEHB eligibility
- * Must have 5+ years of service to carry into retirement
+ * Check FEHB eligibility to carry coverage into retirement.
+ *
+ * Real rule (5 U.S.C. 8905 / OPM): the employee must have been enrolled in FEHB for
+ * the 5 years immediately preceding retirement (or since first eligibility) AND retire
+ * on an immediate annuity. We cannot see FEHB enrollment history, so we approximate the
+ * 5-year rule with 5+ years of service, but we DO enforce the immediate-annuity test.
+ *
+ * Immediate annuity requires one of: age 62 with 5+ years, age 60 with 20+ years,
+ * or MRA with 30+ years. (MRA+10 also yields an immediate annuity, but if postponed to
+ * preserve a larger benefit, FEHB is suspended until the annuity begins — not modeled.)
  */
 export function isFEHBEligible(
-  currentAge: number,
-  totalYearsOfService: number
+  ageAtRetirement: number,
+  totalYearsOfService: number,
+  birthYear: number
 ): boolean {
-  // Generally need 5 years of FEHB participation and retire on immediate annuity
-  // Simplified: 5+ years of service
-  if (totalYearsOfService >= 5) return true;
+  // Must meet the 5-year (approximated by service) coverage requirement
+  if (totalYearsOfService < 5) return false;
 
-  return false;
+  // Must retire on an immediate annuity
+  return canRetireNow(ageAtRetirement, totalYearsOfService, birthYear);
 }

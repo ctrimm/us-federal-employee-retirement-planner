@@ -94,7 +94,7 @@ function deepMergeProfile(base: UserProfile, updates: Partial<UserProfile>): Use
       // Ensure accounts array is properly copied
       accounts: updates.otherInvestments.accounts
         ? [...updates.otherInvestments.accounts]
-        : merged.otherInvestments.accounts,
+        : merged.otherInvestments?.accounts ?? [],
     };
   }
 
@@ -109,19 +109,19 @@ function deepMergeProfile(base: UserProfile, updates: Partial<UserProfile>): Use
       // Ensure all planning arrays are properly copied
       children: updates.planning.children
         ? [...updates.planning.children]
-        : merged.planning.children,
+        : merged.planning?.children ?? [],
       lifeEvents: updates.planning.lifeEvents
         ? [...updates.planning.lifeEvents]
-        : merged.planning.lifeEvents,
+        : merged.planning?.lifeEvents ?? [],
       milestones: updates.planning.milestones
         ? [...updates.planning.milestones]
-        : merged.planning.milestones,
+        : merged.planning?.milestones ?? [],
       debts: updates.planning.debts
         ? [...updates.planning.debts]
-        : merged.planning.debts,
+        : merged.planning?.debts ?? [],
       assets: updates.planning.assets
         ? [...updates.planning.assets]
-        : merged.planning.assets,
+        : merged.planning?.assets ?? [],
     };
   }
 

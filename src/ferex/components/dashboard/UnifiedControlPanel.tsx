@@ -16,6 +16,7 @@ import type {
   NonFederalEmploymentPeriod,
   OtherAccount,
   OtherAccountType,
+  SpecialProvisionType,
 } from '../../types';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -166,10 +167,21 @@ export function UnifiedControlPanel({
   const [spouseSickLeave, setSpouseSickLeave] = useState(
     profile.personal.spouseInfo?.sickLeaveHours || 0
   );
+  const [spouseSpecialProvision, setSpouseSpecialProvision] = useState<SpecialProvisionType>(
+    profile.personal.spouseInfo?.specialProvisionType || 'none'
+  );
+  const [spouseOtherAccounts, setSpouseOtherAccounts] = useState<OtherAccount[]>(
+    profile.personal.spouseInfo?.otherInvestments?.accounts || []
+  );
   // FIRE Settings
-  const [withdrawalStrategy, setWithdrawalStrategy] = useState<'fixed_percent' | 'guardrails'>(
+  const [withdrawalStrategy, setWithdrawalStrategy] = useState<'fixed_percent' | 'guardrails' | 'tax_optimal'>(
     profile.assumptions.withdrawalStrategy || 'fixed_percent'
   );
+  // Roth conversion strategy: 'off' (none) | a bracket rate (0.10/0.12/0.22/0.24) | 'auto'
+  const initialRoth = profile.assumptions.rothConversionStrategy === 'fill_bracket'
+    ? (profile.assumptions.rothConversionBracketCeiling ?? 0.12)
+    : 'off';
+  const [rothConversion, setRothConversion] = useState<number | 'off' | 'auto'>(initialRoth as number | 'off' | 'auto');
   const [leanFireMultiplier, setLeanFireMultiplier] = useState(
     profile.assumptions.leanFireMultiplier || 0.75
   );
@@ -192,6 +204,32 @@ export function UnifiedControlPanel({
   );
   const [partTimeEndAge, setPartTimeEndAge] = useState(
     profile.retirement.partTimeEndAge || Math.min(currentAge + 10, lifeExpectancy)
+  );
+
+  // Advanced federal strategies
+  const [militaryServiceYears, setMilitaryServiceYears] = useState(
+    profile.employment.militaryServiceYears || 0
+  );
+  const [militaryDepositPaid, setMilitaryDepositPaid] = useState(
+    profile.employment.militaryDepositPaid || false
+  );
+  const [specialProvisionType, setSpecialProvisionType] = useState<SpecialProvisionType>(
+    profile.employment.specialProvisionType || 'none'
+  );
+  const [postponeRetirement, setPostponeRetirement] = useState(
+    profile.retirement.postponeRetirement || false
+  );
+  const [annualLeaveHours, setAnnualLeaveHours] = useState(
+    profile.retirement.annualLeaveHoursAtRetirement || 0
+  );
+  const [retirementMonth, setRetirementMonth] = useState(
+    profile.retirement.retirementMonth || 12
+  );
+  const [earlyOutVERA, setEarlyOutVERA] = useState(
+    profile.retirement.earlyOutVERA || false
+  );
+  const [vsipAmount, setVsipAmount] = useState(
+    profile.retirement.vsipAmount || 0
   );
 
   // Family Tab
@@ -288,6 +326,20 @@ export function UnifiedControlPanel({
     setOtherAccounts(otherAccounts.filter((a) => a.id !== id));
   };
 
+  // Spouse's own non-TSP accounts (IRA / 401k / brokerage / Roth / etc.)
+  const addSpouseAccount = () => {
+    setSpouseOtherAccounts([
+      ...spouseOtherAccounts,
+      { id: `sp-account-${Date.now()}`, name: 'New Account', type: 'brokerage', currentBalance: 0, returnAssumption: 6.5 },
+    ]);
+  };
+  const updateSpouseAccount = (id: string, updates: Partial<OtherAccount>) => {
+    setSpouseOtherAccounts(spouseOtherAccounts.map((a) => (a.id === id ? { ...a, ...updates } : a)));
+  };
+  const removeSpouseAccount = (id: string) => {
+    setSpouseOtherAccounts(spouseOtherAccounts.filter((a) => a.id !== id));
+  };
+
   const addChild = () => {
     setChildren([
       ...children,
@@ -382,6 +434,9 @@ export function UnifiedControlPanel({
         nonFederalPeriods,
         sickLeaveHours,
         currentOrLastSalary: federalSalary,
+        militaryServiceYears,
+        militaryDepositPaid,
+        specialProvisionType,
       },
       retirement: {
         ...profile.retirement,
@@ -392,6 +447,11 @@ export function UnifiedControlPanel({
         partTimeStartAge,
         partTimeEndAge,
         sideHustleIncome,
+        postponeRetirement,
+        annualLeaveHoursAtRetirement: annualLeaveHours,
+        retirementMonth,
+        earlyOutVERA,
+        vsipAmount,
       },
       tsp: {
         ...profile.tsp,
@@ -407,6 +467,8 @@ export function UnifiedControlPanel({
         applyExpensesFromCurrentAge,
         expenseInflationRate,
         withdrawalStrategy,
+        rothConversionStrategy: rothConversion === 'off' ? 'manual' : 'fill_bracket',
+        rothConversionBracketCeiling: rothConversion === 'off' ? undefined : rothConversion,
         leanFireMultiplier,
         chubbyFireMultiplier,
         fatFireMultiplier,
@@ -427,6 +489,12 @@ export function UnifiedControlPanel({
               servicePeriods: spouseIsFederal ? spouseServicePeriods : undefined,
               high3Salary: spouseIsFederal ? spouseHigh3 : undefined,
               sickLeaveHours: spouseIsFederal ? spouseSickLeave : undefined,
+              specialProvisionType: spouseIsFederal ? spouseSpecialProvision : undefined,
+              // Spouse's own non-TSP accounts apply whether or not they are a federal employee
+              otherInvestments: {
+                accounts: spouseOtherAccounts,
+                totalBalance: spouseOtherAccounts.reduce((sum, acc) => sum + acc.currentBalance, 0),
+              },
             }
           : undefined,
       },
@@ -700,11 +768,51 @@ export function UnifiedControlPanel({
                         >
                           Guardrails
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => setWithdrawalStrategy('tax_optimal')}
+                          className={`flex-1 py-1.5 rounded text-xs font-medium border transition-colors ${
+                            withdrawalStrategy === 'tax_optimal'
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                          }`}
+                        >
+                          Tax-Optimal
+                        </button>
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">
                         {withdrawalStrategy === 'guardrails'
                           ? 'Rate adjusts ±10% when portfolio drifts outside 80–120% of retirement baseline'
+                          : withdrawalStrategy === 'tax_optimal'
+                          ? 'Withdraws only what you need to cover spending, drawing taxable → tax-deferred → Roth (RMDs first) to minimize taxes and preserve growth'
                           : 'Fixed withdrawal rate every year regardless of portfolio performance'}
+                      </p>
+                    </div>
+
+                    {/* Roth Conversion Strategy */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Roth Conversions</label>
+                      <select
+                        value={String(rothConversion)}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setRothConversion(v === 'off' || v === 'auto' ? (v as 'off' | 'auto') : parseFloat(v));
+                        }}
+                        className="w-full px-3 py-2 border rounded-md text-sm"
+                      >
+                        <option value="off">Off</option>
+                        <option value="0.1">Fill to 10% bracket</option>
+                        <option value="0.12">Fill to 12% bracket</option>
+                        <option value="0.22">Fill to 22% bracket</option>
+                        <option value="0.24">Fill to 24% bracket</option>
+                        <option value="auto">Auto-optimize (maximize after-tax wealth)</option>
+                      </select>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {rothConversion === 'auto'
+                          ? 'Searches every bracket target across your whole retirement and picks the one that leaves the most after-tax wealth (multi-year optimization).'
+                          : rothConversion === 'off'
+                          ? 'No automatic conversions. Converting pre-tax → Roth in low-income years can cut lifetime taxes by shrinking future RMDs.'
+                          : 'Converts household pre-tax balances to Roth each year up to the top of this bracket, from retirement until RMDs begin.'}
                       </p>
                     </div>
 
@@ -784,6 +892,152 @@ export function UnifiedControlPanel({
                   ~2,087 hours = 1 year service credit
                 </p>
               </div>
+
+              {/* Advanced Federal Strategies — collapsible */}
+              <details className="pt-4 border-t group">
+                <summary className="font-medium cursor-pointer select-none flex items-center justify-between">
+                  <span>⚙️ Advanced Federal Strategies</span>
+                  <span className="text-xs text-muted-foreground group-open:hidden">Show</span>
+                </summary>
+                <div className="space-y-4 mt-3">
+                  {/* Special provisions (high-risk / high-stress careers) */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Special Provision Category
+                    </label>
+                    <select
+                      value={specialProvisionType}
+                      onChange={(e) => setSpecialProvisionType(e.target.value as SpecialProvisionType)}
+                      className="w-full px-3 py-2 border rounded-md"
+                    >
+                      <option value="none">None (regular FERS)</option>
+                      <option value="leo_firefighter">Law Enforcement / Firefighter / CBPO</option>
+                      <option value="atc">Air Traffic Controller</option>
+                      <option value="other">Other special category</option>
+                    </select>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Enhanced FERS retirement: <strong>1.7%</strong> of high-3 for the first 20 years
+                      (1.0% after), retire at age 50 with 20 years or any age with 25, immediate COLAs,
+                      and a supplement that's earnings-test exempt until your MRA.
+                      {specialProvisionType === 'atc' && ' Mandatory retirement at age 56.'}
+                      {(specialProvisionType === 'leo_firefighter' || specialProvisionType === 'other') && ' Mandatory retirement at age 57.'}
+                    </p>
+                  </div>
+
+                  {/* Military service buyback */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Military Service Years: {militaryServiceYears}
+                    </label>
+                    <input
+                      type="number"
+                      value={militaryServiceYears}
+                      onChange={(e) => setMilitaryServiceYears(parseFloat(e.target.value) || 0)}
+                      min={0}
+                      max={40}
+                      step={0.5}
+                      className="w-full px-3 py-2 border rounded-md"
+                    />
+                    <label className="flex items-center gap-2 mt-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={militaryDepositPaid}
+                        onChange={(e) => setMilitaryDepositPaid(e.target.checked)}
+                      />
+                      Military deposit paid (counts toward FERS service)
+                    </label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Active-duty time only counts toward your annuity if you pay the deposit (~3% of military base pay).
+                    </p>
+                  </div>
+
+                  {/* Postponed MRA+10 */}
+                  <div>
+                    <label className="flex items-center gap-2 text-sm font-medium">
+                      <input
+                        type="checkbox"
+                        checked={postponeRetirement}
+                        onChange={(e) => setPostponeRetirement(e.target.checked)}
+                      />
+                      Postpone annuity (MRA+10)
+                    </label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Leave service at {leaveServiceAge} but start the annuity at {claimPensionAge} to shrink the 5%/yr
+                      reduction. FEHB is suspended during the gap and reinstated when the annuity begins. Set the
+                      "claim pension" age later than the "leave service" age above.
+                    </p>
+                  </div>
+
+                  {/* Lump-sum annual leave */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Unused Annual Leave Hours: {annualLeaveHours}
+                    </label>
+                    <input
+                      type="number"
+                      value={annualLeaveHours}
+                      onChange={(e) => setAnnualLeaveHours(parseInt(e.target.value) || 0)}
+                      min={0}
+                      max={440}
+                      step={8}
+                      className="w-full px-3 py-2 border rounded-md"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Paid as a lump sum at your final hourly rate in the year you separate (taxable). Most feds carry up to 240 hours.
+                    </p>
+                  </div>
+
+                  {/* Separation month */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Separation Month: {['', 'Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][retirementMonth]}
+                    </label>
+                    <input
+                      type="range"
+                      min={1}
+                      max={12}
+                      step={1}
+                      value={retirementMonth}
+                      onChange={(e) => setRetirementMonth(parseInt(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Your FERS annuity begins the first of the month after you separate, so the first year is prorated. December = a full first year next January.
+                    </p>
+                  </div>
+
+                  {/* VERA / VSIP */}
+                  <div>
+                    <label className="flex items-center gap-2 text-sm font-medium">
+                      <input
+                        type="checkbox"
+                        checked={earlyOutVERA}
+                        onChange={(e) => setEarlyOutVERA(e.target.checked)}
+                      />
+                      VERA early-out (immediate unreduced annuity)
+                    </label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Voluntary Early Retirement: age 50 with 20+ years, or any age with 25+ years. No age reduction; the
+                      FERS supplement begins at your MRA.
+                    </p>
+                    <label className="block text-sm font-medium mb-2 mt-3">
+                      VSIP Separation Incentive: {formatCurrency(vsipAmount, 0)}
+                    </label>
+                    <input
+                      type="number"
+                      value={vsipAmount}
+                      onChange={(e) => setVsipAmount(parseInt(e.target.value) || 0)}
+                      min={0}
+                      max={25000}
+                      step={500}
+                      className="w-full px-3 py-2 border rounded-md"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      One-time taxable buyout (capped at $25,000) paid in the year you separate.
+                    </p>
+                  </div>
+                </div>
+              </details>
 
               <div className="pt-4 border-t">
                 <h4 className="font-medium mb-2">Service History</h4>
@@ -1267,9 +1521,9 @@ export function UnifiedControlPanel({
                           className="w-4 h-4"
                         />
                         <div>
-                          <div className="font-medium text-sm">Worked for Federal Government</div>
+                          <div className="font-medium text-sm">Current or former federal employee</div>
                           <div className="text-xs text-gray-500">
-                            Track spouse's federal pension
+                            Track spouse's FERS/CSRS pension, TSP, and special provisions (works for former feds too)
                           </div>
                         </div>
                       </label>
@@ -1304,6 +1558,26 @@ export function UnifiedControlPanel({
                             />
                             <p className="text-xs text-gray-500 mt-1">
                               ~2,087 hours = 1 year service credit
+                            </p>
+                          </div>
+
+                          {/* Special Provision Category */}
+                          <div>
+                            <label className="block text-xs font-medium mb-1">
+                              Special Provision Category
+                            </label>
+                            <select
+                              value={spouseSpecialProvision}
+                              onChange={(e) => setSpouseSpecialProvision(e.target.value as SpecialProvisionType)}
+                              className="w-full px-2 py-1 border rounded text-sm"
+                            >
+                              <option value="none">None (regular FERS)</option>
+                              <option value="leo_firefighter">Law Enforcement / Firefighter / CBPO</option>
+                              <option value="atc">Air Traffic Controller</option>
+                              <option value="other">Other special category</option>
+                            </select>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Enhanced 1.7%/1.0% accrual and immediate COLAs for high-risk careers.
                             </p>
                           </div>
 
@@ -1374,6 +1648,54 @@ export function UnifiedControlPanel({
                           </div>
                         </div>
                       )}
+
+                      {/* Spouse's own accounts (IRA / 401k / brokerage / Roth) — fed or not */}
+                      <div className="mt-3 pt-3 border-t">
+                        <h5 className="text-xs font-medium mb-2">Spouse Investment Accounts</h5>
+                        <div className="space-y-2 mb-2">
+                          {spouseOtherAccounts.map((account) => (
+                            <Card key={account.id} className="p-2 bg-purple-50 text-xs">
+                              <div className="flex justify-between mb-1">
+                                <input
+                                  type="text"
+                                  value={account.name}
+                                  onChange={(e) => updateSpouseAccount(account.id, { name: e.target.value })}
+                                  className="font-medium bg-transparent border-b border-transparent hover:border-gray-300 text-xs w-28"
+                                />
+                                <button onClick={() => removeSpouseAccount(account.id)} className="text-red-600">Remove</button>
+                              </div>
+                              <div className="grid grid-cols-2 gap-1">
+                                <select
+                                  value={account.type}
+                                  onChange={(e) => updateSpouseAccount(account.id, { type: e.target.value as OtherAccountType })}
+                                  className="px-1 py-1 border rounded text-xs"
+                                >
+                                  <option value="traditional_ira">Trad IRA</option>
+                                  <option value="roth_ira">Roth IRA</option>
+                                  <option value="401k">401(k)</option>
+                                  <option value="brokerage">Brokerage</option>
+                                  <option value="savings">Savings</option>
+                                  <option value="real_estate">Real Estate</option>
+                                  <option value="other">Other</option>
+                                </select>
+                                <input
+                                  type="number"
+                                  value={account.currentBalance}
+                                  onChange={(e) => updateSpouseAccount(account.id, { currentBalance: parseInt(e.target.value) || 0 })}
+                                  className="px-1 py-1 border rounded text-xs"
+                                  placeholder="Balance"
+                                />
+                              </div>
+                            </Card>
+                          ))}
+                        </div>
+                        <Button variant="outline" onClick={addSpouseAccount} className="w-full text-xs h-7" size="sm">
+                          + Add Spouse Account
+                        </Button>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Folded into the household drawdown (and tax-optimal order), taxed by type.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 )}

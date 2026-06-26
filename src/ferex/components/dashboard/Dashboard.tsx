@@ -11,6 +11,7 @@ import { IncomeProjectionChart } from '../charts/IncomeProjectionChart';
 import { TSPBalanceChart } from '../charts/TSPBalanceChart';
 import { NetWorthChart } from '../charts/NetWorthChart';
 import { ExpensesChart } from '../charts/ExpensesChart';
+import { TaxBreakdownChart } from '../charts/TaxBreakdownChart';
 import { ProjectionTable } from './ProjectionTable';
 
 interface DashboardProps {
@@ -227,9 +228,22 @@ export function Dashboard({
         <Card className="p-6">
           <h2 className="text-xl font-semibold mb-4">Retirement Income Over Time</h2>
           <p className="text-sm text-muted-foreground mb-4">
-            Stacked view of pension, TSP distributions, and Social Security
+            Stacked view of pension, TSP, Social Security, and other-investment drawdown. Click a legend item to show/hide it.
           </p>
           <IncomeProjectionChart
+            projections={projections}
+            syncedAge={syncedAge}
+            onAgeHover={setSyncedAge}
+          />
+        </Card>
+
+        {/* Tax Breakdown Chart */}
+        <Card className="p-6">
+          <h2 className="text-xl font-semibold mb-4">Taxes Over Time</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Federal income tax, long-term capital gains tax, and state tax each year. Click a legend item to show/hide it.
+          </p>
+          <TaxBreakdownChart
             projections={projections}
             syncedAge={syncedAge}
             onAgeHover={setSyncedAge}
@@ -320,7 +334,7 @@ export function Dashboard({
               <p className="text-sm text-muted-foreground">
                 {eligibility.fehbEligible
                   ? 'You can continue Federal Employee Health Benefits into retirement'
-                  : 'You need 5+ years of service for FEHB eligibility'}
+                  : 'Requires retiring on an immediate annuity with 5+ years of FEHB enrollment'}
               </p>
             </div>
           </div>

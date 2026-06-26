@@ -227,7 +227,7 @@ export function FerexApp() {
             <Button variant="ghost" onClick={() => setView('landing')}>
               ← Back to Home
             </Button>
-            <Button variant="outline" onClick={handleStartNew}>
+            <Button variant="outline" onClick={() => handleStartNew()}>
               New Scenario
             </Button>
           </div>

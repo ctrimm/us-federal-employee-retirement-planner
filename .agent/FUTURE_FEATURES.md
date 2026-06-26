@@ -136,16 +136,55 @@ This document tracks planned features and enhancements for future releases of FE
   - Government Pension Offset calculator
   - More accurate Social Security estimates
 
-- [ ] **Special Retirement Categories**
-  - Law Enforcement Officer (LEO) calculations
-  - Air Traffic Controller (ATC) rules
-  - Firefighter special provisions
-  - Custom accrual rates
+- [x] **Special Retirement Categories** (FERS special provisions)
+  - Law Enforcement Officer (LEO) / firefighter / CBPO / ATC: 1.7%/1.0% accrual
+  - Age-50/20 or any-age/25 eligibility, no MRA+10 reduction
+  - Immediate COLA, supplement earnings-test exemption until MRA
+  - Mandatory retirement ages surfaced (56 ATC / 57 others)
+  - _Remaining:_ spouse special provisions; hard enforcement of mandatory ages
 
 - [ ] **Deferred Retirement Calculator**
   - Estimate deferred retirement benefits
   - Show when eligible to start drawing
   - Compare immediate vs. deferred options
+
+### Federal Retirement Strategy Modeling (from community/expert tips)
+
+Strategies surfaced in the README "Federal Retirement Tips & Strategies" section. Configure
+the implemented ones under **⚙️ Advanced Federal Strategies** in the control panel.
+
+- [x] **Lump-sum annual leave payout** at retirement (paid at final hourly rate) as a one-time
+  taxable inflow in the separation year.
+- [x] **Postponed MRA+10 annuity**: claim age can be set later than leave-service age to
+  reduce/eliminate the 5%/yr penalty, with FEHB suspended during the gap and reinstated when
+  the annuity begins.
+- [x] **FERS Supplement earnings test**: supplement reduced $1 for every $2 of earned income
+  above the annual Social Security limit.
+- [x] **Military service deposit** buyback: active-duty years added to FERS service when the
+  deposit is marked paid.
+- [x] **VERA / VSIP early-out**: immediate unreduced annuity (supplement from MRA) plus an
+  optional one-time VSIP payment.
+- [x] **Retirement-month proration**: separation month prorates the first annuity year
+  (FERS "first of the month after separation").
+- [x] **Whole-portfolio drawdown & taxation**: TSP, non-federal 401k, and other accounts drawn
+  in retirement and taxed by type (ordinary / Roth tax-free / LTCG); RMDs; capital-gains tax.
+- [x] **Medicare IRMAA** Part B surcharge by MAGI tier.
+- [x] **CSRS survivor** 55% benefit with the 2.5%/10% cost formula.
+
+Still open:
+
+- [ ] **Bridge health coverage** (COBRA/ACA) cost during a postponed-annuity FEHB gap.
+- [ ] **FEHB suspend → Medicare Advantage / TRICARE** option, including TRICARE time counting
+  toward the 5-year FEHB rule.
+- [ ] **IRMAA refinements**: 2-year MAGI lookback and Part D surcharge.
+- [x] **Tax-optimal per-account drawdown ordering**: a third withdrawal strategy that funds the
+  spending gap from taxable → tax-deferred → Roth (RMDs first) with a fixed-point tax gross-up.
+- [x] **Full household accounts**: the spouse's own TSP and non-TSP accounts (IRA/401k/brokerage/Roth)
+  are modeled, taxed by type, given spouse-age RMDs, counted in net worth, and folded into the
+  household drawdown (including the tax-optimal order). Works for a current or former federal spouse.
+- [x] **Roth conversion optimization**: auto-convert household pre-tax → Roth each year to fill a
+  target bracket within the pre-RMD window; plus an **Auto** mode that globally searches bracket
+  targets across the whole projection and maximizes after-tax terminal wealth (multi-year optimization).
 
 ### User Experience
 

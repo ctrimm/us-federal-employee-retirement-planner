@@ -8,12 +8,18 @@ export type Gender = 'male' | 'female';
 export type SurvivorAnnuityType = 'none' | 'standard' | 'courtOrdered';
 export type FEHBCoverageLevel = 'self' | 'self+one' | 'self+family';
 
+// FERS special provisions (enhanced retirement) for high-risk / high-stress occupations.
+//  - leo_firefighter: law enforcement officers, firefighters, nuclear couriers, CBPO, etc.
+//  - atc: air traffic controllers (mandatory retirement at 56 vs 57 for the others)
+export type SpecialProvisionType = 'none' | 'leo_firefighter' | 'atc' | 'other';
+
 export interface ServicePeriod {
   id: string;
   startDate: Date;
   endDate?: Date; // Omit if current
   system: RetirementSystem;
   isActive: boolean; // Current employment
+  specialProvision?: boolean; // Covered under FERS special provisions (1.7%/1.0% accrual)
 }
 
 export interface NonFederalEmploymentPeriod {
@@ -49,10 +55,13 @@ export interface SpouseInfo {
   servicePeriods?: ServicePeriod[]; // Federal service history
   high3Salary?: number; // High-3 average salary for spouse pension calculation
   sickLeaveHours?: number; // Unused sick leave hours
-  // Spouse TSP
+  specialProvisionType?: SpecialProvisionType; // FERS special provisions (LEO/FF/ATC) for the spouse
+  // Spouse TSP (from current OR former federal service)
   tspCurrentBalance?: number; // Current TSP balance for spouse
   tspAnnualContribution?: number; // Annual employee TSP contribution while working
   tspReturnAssumption?: number; // Expected annual return % (default 6.5%)
+  // Spouse's own non-TSP accounts (IRA / 401k / brokerage / Roth / etc.) — from any employer
+  otherInvestments?: OtherInvestmentsInfo;
   // Spouse Social Security
   socialSecurityEstimate?: number; // Annual SS estimate from SSA.gov (at their full retirement age)
 }
@@ -83,6 +92,7 @@ export interface TSPAllocation {
 
 export interface PersonalInfo {
   birthYear: number;
+  gender?: Gender;
   lifeExpectancy?: number; // Default 85 if not specified
   spouseInfo?: SpouseInfo;
 }
@@ -96,6 +106,13 @@ export interface EmploymentInfo {
   sickLeaveHours?: number; // Unused sick leave hours (converts to service time)
   socialSecurityEstimate?: number; // Annual SS estimate from SSA.gov (used for FERS Supplement and SS projection)
   wepMonthlyReduction?: number; // WEP reduction in $/month from SSA notice (only used when no ssEstimate provided)
+  // Military service buyback: active-duty years count toward FERS service only if a deposit is paid
+  militaryServiceYears?: number; // Years of active-duty military service
+  militaryDepositPaid?: boolean; // Whether the military deposit has been (or will be) paid
+  // FERS special provisions: when set, FERS service periods are treated as covered service
+  // (1.7%/1.0% accrual, age-50/20 or any-age/25 eligibility, immediate COLA, supplement
+  // earnings-test exempt until MRA). Per-period overrides via ServicePeriod.specialProvision.
+  specialProvisionType?: SpecialProvisionType;
 }
 
 export interface RetirementInfo {
@@ -103,6 +120,17 @@ export interface RetirementInfo {
   leaveServiceAge?: number; // Age when leaving federal service
   intendedRetirementAge?: number; // Age when claiming pension (can be after leaving service)
   projectionEndAge?: number;
+  // Postponed MRA+10 retirement: defer the annuity start (claim age > leave age) to shrink the
+  // 5%/yr reduction; FEHB/FEGLI are suspended during the gap and reinstated when the annuity begins.
+  postponeRetirement?: boolean;
+  // Lump-sum annual leave: unused hours paid out at separation, at the final hourly salary rate.
+  annualLeaveHoursAtRetirement?: number;
+  // Separation month (1-12). FERS annuity begins the first of the *next* month, so the first
+  // year's annuity is prorated. Undefined = treat as a full first year.
+  retirementMonth?: number;
+  // VERA / VSIP early-out
+  earlyOutVERA?: boolean; // Voluntary Early Retirement Authority — immediate unreduced annuity
+  vsipAmount?: number; // Voluntary Separation Incentive Payment — one-time taxable payment at separation
   // Barista FIRE settings
   enableBaristaFire?: boolean;
   partTimeIncomeAnnual?: number; // Annual part-time income
@@ -139,6 +167,7 @@ export interface OtherAccount {
   name: string;
   type: OtherAccountType;
   currentBalance: number;
+  costBasis?: number; // Taxable accounts: amount already taxed (defaults to an estimated embedded gain)
   annualContribution?: number;
   returnAssumption?: number;
   taxDeferred?: boolean; // For IRAs, 401ks
@@ -160,8 +189,18 @@ export interface AssumptionsInfo {
   applyExpensesFromCurrentAge?: boolean; // Start expenses at current age instead of retirement
   expenseInflationRate?: number; // Rate to inflate expenses (defaults to inflationRate)
   stateTaxRate?: number; // Optional flat state income tax rate (e.g. 5 for 5%)
+  taxableDividendYield?: number; // Annual dividend/interest yield on taxable accounts (%, default 2)
+  // ── Roth conversion optimization ──
+  // 'manual'      → convert a fixed dollar amount per year (tsp.rothConversionAnnual)
+  // 'fill_bracket' → auto-convert household Traditional→Roth to fill up to a target tax bracket
+  rothConversionStrategy?: 'manual' | 'fill_bracket';
+  // Target marginal rate to fill (e.g. 0.12, 0.22, 0.24), or 'auto' to globally search the
+  // candidate that maximizes terminal after-tax net worth across the whole projection.
+  rothConversionBracketCeiling?: number | 'auto';
+  rothConversionStartAge?: number; // First age to run conversions (default: retirement)
+  rothConversionEndAge?: number;   // Last age (default: the year before RMDs begin)
   // Withdrawal strategy
-  withdrawalStrategy?: 'fixed_percent' | 'guardrails'; // Default fixed_percent
+  withdrawalStrategy?: 'fixed_percent' | 'guardrails' | 'tax_optimal'; // Default fixed_percent
   guardrailsLowerPct?: number; // Portfolio % of initial that triggers spending cut (default 80)
   guardrailsUpperPct?: number; // Portfolio % of initial that triggers spending increase (default 120)
   guardrailsSpendingCutPct?: number; // % to reduce withdrawal when below lower threshold (default 10)
@@ -276,6 +315,12 @@ export interface ProjectionYear {
   socialSecurity: number; // If applicable
   fersSupplement: number; // FERS Supplement (paid from retirement to age 62 for eligible FERS retirees)
   otherIncome: number; // Part-time work, side hustle, etc.
+  otherInvestmentsDistribution?: number; // Drawdown income from non-TSP accounts + non-federal 401k
+  // One-time separation inflows (paid in the year federal service ends)
+  lumpSumLeavePayout?: number; // Unused annual leave paid out at retirement
+  vsipPayout?: number; // VSIP separation incentive
+  // FERS Supplement earnings-test reduction applied this year (informational)
+  supplementEarningsTestReduction?: number;
   spouseIncome: number; // Total spouse income (working income OR sum of pension+TSP+SS in retirement)
   // Spouse income breakdown (auto-calculated when full spouse profile is provided)
   spousePension?: number; // Spouse's federal pension (if applicable)
@@ -291,6 +336,9 @@ export interface ProjectionYear {
   federalTax?: number;
   stateTax?: number;
   totalTax?: number;
+  capitalGainsTax?: number; // Long-term capital gains tax on taxable-account withdrawals
+  rothConversion?: number; // Traditional→Roth converted this year (taxable ordinary income)
+  traditionalBalance?: number; // Household remaining pre-tax balance (drives future RMDs)
   effectiveTaxRate?: number;
   expenses: number; // Total annual expenses
   collegeCosts: number; // Annual college costs for children (subset of expenses)
@@ -374,9 +422,25 @@ export const DEFAULT_LIFE_EXPECTANCY = 85; // Average life expectancy
 // FERS and CSRS constants
 export const FERS_ACCRUAL_RATE = 0.01; // 1% per year (standard)
 export const FERS_ENHANCED_ACCRUAL_RATE = 0.011; // 1.1% per year (age 62+ with 20+ years)
+// FERS special provisions (LEO/FF/ATC/etc.): 1.7% for the first 20 covered years, 1% after.
+export const FERS_SPECIAL_ACCRUAL_RATE = 0.017;
+export const FERS_SPECIAL_FIRST_YEARS = 20;
+// Mandatory separation ages by special category
+export const SPECIAL_MANDATORY_RETIREMENT_AGE = { atc: 56, leo_firefighter: 57, other: 57 };
 export const FERS_SUPPLEMENT_AGE = 62;
 export const MRA_10_ANNUAL_REDUCTION = 0.05; // 5% per year under 62 for MRA+10 retirees
 export const MEDICARE_PART_B_MONTHLY_2024 = 174.70; // Standard Part B premium; grows with healthcareInflation
+// Age-62 Social Security benefit is roughly 70% of the full-retirement-age (67) benefit.
+// Used to convert an entered FRA estimate into an age-62 figure for the FERS supplement.
+export const SS_AGE62_TO_FRA_RATIO = 0.70;
+// 2024 Social Security annual earnings-test limit for those under full retirement age.
+// The FERS Supplement is reduced $1 for every $2 of wages above this limit.
+export const SS_ANNUAL_EARNINGS_LIMIT = 22_320;
+// Standard federal work hours in a year (used for sick/annual leave hour→year conversions).
+export const STANDARD_WORK_HOURS_PER_YEAR = 2087;
+// Default cost basis for a taxable brokerage account when not specified: assume ~25% of the
+// current balance is embedded (untaxed) gain (basis = 75% of balance).
+export const DEFAULT_TAXABLE_BASIS_FRACTION = 0.75;
 export const LEAN_FIRE_MULTIPLIER = 0.75;   // LeanFIRE: 75% of base living expenses
 export const CHUBBY_FIRE_MULTIPLIER = 1.25; // ChubbyFIRE: 125% of base living expenses
 export const FAT_FIRE_MULTIPLIER = 1.50;    // FatFIRE: 150% of base living expenses
