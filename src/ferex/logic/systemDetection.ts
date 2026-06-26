@@ -147,6 +147,7 @@ export function canRetireNow(
 
 /**
  * Calculate earliest retirement age
+ * Checks conditions in order from most to least favorable (most years first)
  */
 export function calculateEarliestRetirementAge(
   birthYear: number,
@@ -159,28 +160,27 @@ export function calculateEarliestRetirementAge(
   // Calculate total years of service
   const totalYears = calculateTotalService(servicePeriods);
 
-  // Find the earliest age they can retire
+  // Check most favorable condition first: MRA with 30+ years (immediate full annuity)
+  if (totalYears >= 30) {
+    return { age: Math.min(mra, currentAge), yearsOfService: totalYears };
+  }
+
+  // Age 60 with 20+ years (immediate full annuity)
+  if (totalYears >= 20) {
+    return { age: Math.min(60, currentAge), yearsOfService: totalYears };
+  }
+
+  // MRA with 10+ years (MRA+10, deferred or reduced annuity)
+  if (totalYears >= 10) {
+    return { age: Math.min(mra, currentAge), yearsOfService: totalYears };
+  }
+
   // Age 62 with 5+ years
   if (totalYears >= 5) {
     return { age: 62, yearsOfService: totalYears };
   }
 
-  // Age 60 with 20+ years
-  if (totalYears >= 20) {
-    return { age: Math.min(60, currentAge), yearsOfService: totalYears };
-  }
-
-  // MRA with 30+ years
-  if (totalYears >= 30) {
-    return { age: Math.min(mra, currentAge), yearsOfService: totalYears };
-  }
-
-  // MRA with 10+ years
-  if (totalYears >= 10) {
-    return { age: Math.min(mra, currentAge), yearsOfService: totalYears };
-  }
-
-  // If not yet eligible, calculate when they will be
+  // If not yet eligible, calculate when they will be (need 5 years for age-62 retirement)
   const yearsUntil5Years = Math.max(0, 5 - totalYears);
   const ageWith5Years = currentAge + yearsUntil5Years;
 

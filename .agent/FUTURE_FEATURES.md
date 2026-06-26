@@ -36,6 +36,19 @@ This document tracks planned features and enhancements for future releases of FE
 - [x] Visual representation in charts and tables
 - [x] Green highlighting for part-time income in tables
 
+### FIRE Tiers & CoastFIRE (NEW!)
+- [x] LeanFIRE milestone (75% spending tier)
+- [x] ChubbyFIRE milestone (125% spending tier)
+- [x] FatFIRE milestone (150% spending tier)
+- [x] CoastFIRE calculation (balance to reach retirement target without contributions)
+- [x] Pension-adjusted FIRE targets (reduce by guaranteed income)
+- [x] FIRE spectrum bar visualization (Lean → Chubby → Fat)
+- [x] CoastFIRE milestone card with achievement age
+- [x] CoastFIRE threshold line on Net Worth chart
+- [x] FIRE Settings section in control panel (collapsible)
+- [x] Withdrawal strategy toggle (fixed % vs guardrails)
+- [x] Customizable FIRE multiplier sliders (Lean 50-90%, Chubby 100-140%, Fat 125-250%)
+
 ### Comprehensive Onboarding (NEW!)
 - [x] 7-step detailed onboarding flow
 - [x] Multiple service periods with automatic break detection
@@ -320,7 +333,8 @@ Features are prioritized based on:
 - **v1.0** ✅: MVP with core features
 - **v1.1** ✅: Enhanced visualizations + control panel + scenario comparison
 - **v1.2** ✅: Barista FIRE + comprehensive onboarding
-- **v1.3** (Next): PDF export + Sankey diagram
+- **v1.3** ✅: FIRE tiers (Lean/Chubby/Fat) + CoastFIRE + withdrawal strategy controls
+- **v1.4** (Next): PDF export + Sankey diagram
 - **v2.0**: User accounts + mobile app + advanced features
 
 ### Contributing
@@ -333,5 +347,5 @@ To suggest a new feature:
 
 ---
 
-**Last Updated**: January 2026
+**Last Updated**: March 2026
 **Maintained By**: FEREX Development Team

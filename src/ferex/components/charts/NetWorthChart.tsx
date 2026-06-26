@@ -4,7 +4,6 @@
  */
 
 import {
-  LineChart,
   Line,
   XAxis,
   YAxis,
@@ -33,8 +32,12 @@ export function NetWorthChart({ projections, syncedAge, onAgeHover }: NetWorthCh
     otherInvestments: p.otherInvestmentsBalance,
     totalAssets: p.totalAssets,
     totalDebt: p.totalDebt,
-    netWorth: p.netWorth, // Already calculated: tspBalance + otherInvestments + assets - debts
+    netWorth: p.netWorth,
+    coastFIRENumber: p.coastFIRENumber,
   }));
+
+  // Only show CoastFIRE line while it's still a meaningful target (pre-retirement)
+  const hasCoastData = chartData.some(d => d.coastFIRENumber != null && d.coastFIRENumber > 0);
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -58,6 +61,11 @@ export function NetWorthChart({ projections, syncedAge, onAgeHover }: NetWorthCh
               </p>
             )}
           </div>
+          {data?.coastFIRENumber > 0 && (
+            <p className="text-cyan-600">
+              CoastFIRE Target: {formatCurrency(data.coastFIRENumber, 0)}
+            </p>
+          )}
           <p className="text-sm font-semibold mt-2 pt-2 border-t">
             Total Net Worth: {formatCurrency(data?.netWorth || 0, 0)}
           </p>
@@ -144,6 +152,17 @@ export function NetWorthChart({ projections, syncedAge, onAgeHover }: NetWorthCh
           fill="url(#colorAssets)"
           name="Other Assets"
         />
+        {hasCoastData && (
+          <Line
+            type="monotone"
+            dataKey="coastFIRENumber"
+            stroke="#06b6d4"
+            strokeWidth={2}
+            strokeDasharray="6 3"
+            dot={false}
+            name="CoastFIRE Target"
+          />
+        )}
       </AreaChart>
     </ResponsiveContainer>
   );

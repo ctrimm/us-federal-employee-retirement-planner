@@ -15,7 +15,6 @@ interface ExpressOnboardingProps {
 }
 
 export function ExpressOnboarding({ onComplete, onCancel }: ExpressOnboardingProps) {
-  console.log('[ExpressOnboarding] Component mounted - Quick Check (3 steps)');
   const [step, setStep] = useState(1);
   const totalSteps = 3;
 
@@ -35,6 +34,7 @@ export function ExpressOnboarding({ onComplete, onCancel }: ExpressOnboardingPro
   // Step 3: Income & TSP
   const [currentSalary, setCurrentSalary] = useState<number>(85000);
   const [tspBalance, setTSPBalance] = useState<number>(150000);
+  const [tspContributionPercent, setTSPContributionPercent] = useState<number>(5);
 
   // Safe date formatting for input[type="date"] fields
   const formatDateForInput = (date: Date | undefined): string => {
@@ -73,7 +73,8 @@ export function ExpressOnboarding({ onComplete, onCancel }: ExpressOnboardingPro
       },
       tsp: {
         currentBalance: tspBalance,
-        annualContribution: 0,
+        annualContribution: Math.round(currentSalary * (tspContributionPercent / 100)),
+        contributionPercent: tspContributionPercent,
         returnAssumption: DEFAULT_TSP.returnAssumption!,
       },
       assumptions: DEFAULT_ASSUMPTIONS,
@@ -272,6 +273,28 @@ export function ExpressOnboarding({ onComplete, onCancel }: ExpressOnboardingPro
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   Used to estimate retirement income alongside your pension
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  How much do you contribute to TSP? (% of salary)
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={tspContributionPercent}
+                    onChange={(e) => setTSPContributionPercent(parseFloat(e.target.value) || 0)}
+                    min={0}
+                    max={100}
+                    step={1}
+                    className="w-full pr-8 px-3 py-2 border rounded-md"
+                  />
+                  <span className="absolute right-3 top-2.5 text-gray-500">%</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  FERS employees get up to 5% employer match. Contribute at least 5% to maximize it.
+                  Estimated annual contribution: ${Math.round(currentSalary * (tspContributionPercent / 100)).toLocaleString()}
                 </p>
               </div>
             </div>

@@ -3,7 +3,7 @@
  * Displays retirement projections and key metrics with interactive charts
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { Scenario, ProjectionYear, EligibilityInfo, PensionBreakdown, UserProfile } from '../../types';
 import { formatCurrency, formatYearsOfService, formatMonthYear } from '../../utils/formatters';
 import { Card } from '@/components/ui/card';
@@ -33,26 +33,6 @@ export function Dashboard({
   // Synchronized tooltip state across all charts
   const [syncedAge, setSyncedAge] = useState<number | null>(null);
 
-  // Debug logging to track when projections change
-  useEffect(() => {
-    console.log('[Dashboard] Received new projections', {
-      count: projections.length,
-      firstAge: projections[0]?.age,
-      lastAge: projections[projections.length - 1]?.age,
-      firstYearPension: projections[0]?.pension,
-      lastYearPension: projections[projections.length - 1]?.pension,
-      timestamp: new Date().toISOString(),
-    });
-  }, [projections]);
-
-  useEffect(() => {
-    console.log('[Dashboard] Scenario changed', {
-      scenarioId: scenario.id,
-      name: scenario.name,
-      timestamp: new Date().toISOString(),
-    });
-  }, [scenario]);
-
   if (!eligibility || !pensionBreakdown) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -64,26 +44,28 @@ export function Dashboard({
   }
 
   const firstYear = projections[0];
-  const lastYear = projections[projections.length - 1];
 
-  // Calculate FIRE Age (when net worth can sustain expenses)
-  const safeWithdrawalRate = scenario.profile.assumptions?.fireWithdrawalRate || 0.04; // 4% default
-  const calculateFireAge = (): { age: number; netWorth: number; fireNumber: number } | null => {
-    for (const year of projections) {
-      const fireNumber = year.expenses / safeWithdrawalRate;
-      // Check if liquid net worth (TSP + investments - debt) can sustain expenses
-      if (year.liquidNetWorth >= fireNumber && year.expenses > 0) {
-        return {
-          age: year.age,
-          netWorth: year.liquidNetWorth,
-          fireNumber,
-        };
-      }
-    }
-    return null;
-  };
+  // Use engine-computed FIRE metrics directly from projection rows
+  const fiYear = projections.find(p => p.isFinanciallyIndependent);
+  const coastYear = projections.find(p => p.isCoastFIREAchieved);
 
-  const fireData = calculateFireAge();
+  // FIRE spectrum: first year each tier is crossed
+  const leanFireYear = projections.find(
+    p => p.leanFireNumber != null && p.leanFireNumber > 0 && p.liquidNetWorth >= p.leanFireNumber
+  );
+  const chubbyFireYear = projections.find(
+    p => p.chubbyFireNumber != null && p.chubbyFireNumber > 0 && p.liquidNetWorth >= p.chubbyFireNumber
+  );
+  const fatFireYear = projections.find(
+    p => p.fatFireNumber != null && p.fatFireNumber > 0 && p.liquidNetWorth >= p.fatFireNumber
+  );
+
+  // Fallback FIRE card data from the FI year
+  const fireData = fiYear
+    ? { age: fiYear.age, netWorth: fiYear.liquidNetWorth, fireNumber: fiYear.adjustedFireNumber || 0 }
+    : null;
+
+  const withdrawalRatePct = scenario.profile.assumptions?.tspDrawdownRate || 4;
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
@@ -97,14 +79,14 @@ export function Dashboard({
 
       {/* FIRE Age Hero Card */}
       {fireData && (
-        <Card className="p-8 mb-8 bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-200 hover:shadow-xl transition-shadow">
+        <Card className="p-8 mb-4 bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-200 hover:shadow-xl transition-shadow">
           <div className="text-center">
             <h2 className="text-lg font-medium text-muted-foreground mb-2">
               🎯 Your Financial Independence Age
             </h2>
             <p className="text-7xl font-bold text-green-600 mb-3">{fireData.age}</p>
             <p className="text-sm text-muted-foreground mb-4">
-              Based on {(safeWithdrawalRate * 100).toFixed(1)}% safe withdrawal rate
+              Based on {withdrawalRatePct.toFixed(1)}% safe withdrawal rate · pension-adjusted FIRE number
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 text-center">
               <div>
@@ -114,7 +96,7 @@ export function Dashboard({
                 </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Your Net Worth at FIRE</p>
+                <p className="text-xs text-muted-foreground">Portfolio at FI</p>
                 <p className="text-lg font-semibold text-blue-700">
                   {formatCurrency(fireData.netWorth, 0)}
                 </p>
@@ -127,6 +109,64 @@ export function Dashboard({
               </div>
             </div>
           </div>
+        </Card>
+      )}
+
+      {/* CoastFIRE Milestone Card */}
+      {coastYear && (
+        <Card className="p-5 mb-4 bg-gradient-to-r from-cyan-50 to-teal-50 border border-cyan-200 hover:shadow-lg transition-shadow">
+          <div className="flex items-center gap-4">
+            <div className="text-4xl">🏄</div>
+            <div className="flex-1">
+              <h3 className="text-base font-semibold text-cyan-800 mb-1">
+                CoastFIRE Achieved at Age {coastYear.age}
+              </h3>
+              <p className="text-sm text-cyan-700">
+                Your portfolio ({formatCurrency(coastYear.liquidNetWorth, 0)}) is large enough to grow to
+                your FIRE target by retirement — without any new contributions.
+                You could stop saving and let compounding do the rest.
+              </p>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-xs text-muted-foreground">CoastFIRE Target</p>
+              <p className="text-lg font-bold text-cyan-700">
+                {formatCurrency(coastYear.coastFIRENumber || 0, 0)}
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* FIRE Spectrum Bar */}
+      {(leanFireYear || chubbyFireYear || fatFireYear) && (
+        <Card className="p-5 mb-8 border border-gray-200 hover:shadow-lg transition-shadow">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">FIRE Spectrum</h3>
+          <div className="flex items-stretch gap-0 rounded-lg overflow-hidden text-center text-xs font-medium mb-3">
+            <div className={`flex-1 py-3 px-2 ${leanFireYear ? 'bg-amber-400 text-white' : 'bg-gray-100 text-gray-400'}`}>
+              <div className="text-lg font-bold">{leanFireYear ? `Age ${leanFireYear.age}` : '–'}</div>
+              <div>LeanFIRE</div>
+              <div className="opacity-80 mt-0.5">
+                {leanFireYear ? formatCurrency(leanFireYear.leanFireNumber || 0, 0) : 'Not reached'}
+              </div>
+            </div>
+            <div className={`flex-1 py-3 px-2 ${chubbyFireYear ? 'bg-orange-400 text-white' : 'bg-gray-100 text-gray-400'}`}>
+              <div className="text-lg font-bold">{chubbyFireYear ? `Age ${chubbyFireYear.age}` : '–'}</div>
+              <div>ChubbyFIRE</div>
+              <div className="opacity-80 mt-0.5">
+                {chubbyFireYear ? formatCurrency(chubbyFireYear.chubbyFireNumber || 0, 0) : 'Not reached'}
+              </div>
+            </div>
+            <div className={`flex-1 py-3 px-2 ${fatFireYear ? 'bg-red-400 text-white' : 'bg-gray-100 text-gray-400'}`}>
+              <div className="text-lg font-bold">{fatFireYear ? `Age ${fatFireYear.age}` : '–'}</div>
+              <div>FatFIRE</div>
+              <div className="opacity-80 mt-0.5">
+                {fatFireYear ? formatCurrency(fatFireYear.fatFireNumber || 0, 0) : 'Not reached'}
+              </div>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Lean = 75% of current spending · Chubby = 125% · Fat = 150% · Pension income reduces each target
+          </p>
         </Card>
       )}
 

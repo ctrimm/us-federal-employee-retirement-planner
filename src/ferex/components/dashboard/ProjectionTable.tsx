@@ -52,6 +52,7 @@ export function ProjectionTable({ projections }: ProjectionTableProps) {
               <th className="text-right py-2 px-2">Pension</th>
               <th className="text-right py-2 px-2">TSP Dist.</th>
               <th className="text-right py-2 px-2">Part-Time</th>
+              <th className="text-right py-2 px-2 text-cyan-600">FERS Supp.</th>
               <th className="text-right py-2 px-2">Soc. Sec.</th>
               <th className="text-right py-2 px-2 font-semibold">Total Income</th>
               <th className="text-right py-2 px-2 text-red-700">Expenses</th>
@@ -78,6 +79,9 @@ export function ProjectionTable({ projections }: ProjectionTableProps) {
                 </td>
                 <td className="text-right py-2 px-2 text-green-600">
                   {projection.otherIncome > 0 ? formatCurrency(projection.otherIncome, 0) : '—'}
+                </td>
+                <td className="text-right py-2 px-2 text-cyan-600">
+                  {projection.fersSupplement > 0 ? formatCurrency(projection.fersSupplement, 0) : '—'}
                 </td>
                 <td className="text-right py-2 px-2">
                   {formatCurrency(projection.socialSecurity, 0)}

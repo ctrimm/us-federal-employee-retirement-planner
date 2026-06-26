@@ -151,25 +151,12 @@ export function useScenario(initialScenario?: Scenario) {
   // This replaces the problematic useMemo with side effects
   useEffect(() => {
     if (!scenario) {
-      console.log('[useScenario] No scenario, clearing calculations');
       setProjections([]);
       setEligibility(null);
       setPensionBreakdown(null);
       setIsCalculating(false);
       return;
     }
-
-    console.log('[useScenario] Scenario changed, recalculating...', {
-      scenarioId: scenario.id,
-      timestamp: new Date().toISOString(),
-      profileSnapshot: {
-        leaveServiceAge: scenario.profile.retirement.leaveServiceAge,
-        claimPensionAge: scenario.profile.retirement.intendedRetirementAge,
-        tspReturn: scenario.profile.tsp.returnAssumption,
-        annualExpenses: scenario.profile.assumptions.annualLivingExpenses,
-        sickLeaveHours: scenario.profile.employment.sickLeaveHours,
-      },
-    });
 
     setIsCalculating(true);
 
@@ -178,14 +165,6 @@ export function useScenario(initialScenario?: Scenario) {
       const newProjections = generateProjections(scenario.profile);
       const newEligibility = determineEligibility(scenario.profile);
       const newPensionBreakdown = getPensionBreakdown(scenario.profile);
-
-      console.log('[useScenario] Calculations complete', {
-        projectionsCount: newProjections.length,
-        firstYearAge: newProjections[0]?.age,
-        lastYearAge: newProjections[newProjections.length - 1]?.age,
-        eligibility: newEligibility,
-        annualPension: newPensionBreakdown?.annualPension,
-      });
 
       // Update all calculated state
       setProjections(newProjections);
@@ -203,15 +182,7 @@ export function useScenario(initialScenario?: Scenario) {
 
   // Update scenario profile with deep merging
   const updateProfile = (updates: Partial<UserProfile>) => {
-    if (!scenario) {
-      console.warn('[useScenario] updateProfile called with no scenario');
-      return;
-    }
-
-    console.log('[useScenario] updateProfile called', {
-      updates: Object.keys(updates),
-      timestamp: new Date().toISOString(),
-    });
+    if (!scenario) return;
 
     // Create a completely new profile with deep merge
     const newProfile = deepMergeProfile(scenario.profile, updates);
@@ -222,12 +193,6 @@ export function useScenario(initialScenario?: Scenario) {
       profile: newProfile,
       lastModified: new Date(),
     };
-
-    console.log('[useScenario] Setting new scenario', {
-      oldScenarioId: scenario.id,
-      newScenarioId: newScenario.id,
-      profileChanged: scenario.profile !== newProfile, // Should always be true
-    });
 
     setScenario(newScenario);
   };
@@ -245,22 +210,12 @@ export function useScenario(initialScenario?: Scenario) {
       },
     };
 
-    console.log('[useScenario] Creating new scenario', {
-      scenarioId: newScenario.id,
-      name,
-    });
-
     setScenario(newScenario);
     return newScenario;
   };
 
   // Load scenario
   const loadScenario = (newScenario: Scenario) => {
-    console.log('[useScenario] Loading scenario', {
-      scenarioId: newScenario.id,
-      name: newScenario.name,
-    });
-
     // Deep clone the profile to ensure clean state
     // Also ensure Date fields are Date objects (in case they were serialized from localStorage)
     const clonedScenario: Scenario = {

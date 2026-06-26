@@ -29,6 +29,7 @@ export function IncomeProjectionChart({ projections, syncedAge, onAgeHover }: In
     age: p.age,
     Pension: p.pension,
     TSP: p.tspDistribution,
+    'FERS Supplement': p.fersSupplement,
     'Social Security': p.socialSecurity,
     'Part-Time Work': p.otherIncome,
   }));
@@ -82,6 +83,10 @@ export function IncomeProjectionChart({ projections, syncedAge, onAgeHover }: In
             <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.8} />
             <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.2} />
           </linearGradient>
+          <linearGradient id="colorFERSSupp" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.8} />
+            <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.2} />
+          </linearGradient>
           <linearGradient id="colorOther" x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8} />
             <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.2} />
@@ -120,6 +125,13 @@ export function IncomeProjectionChart({ projections, syncedAge, onAgeHover }: In
           stackId="1"
           stroke="#10b981"
           fill="url(#colorTSP)"
+        />
+        <Area
+          type="monotone"
+          dataKey="FERS Supplement"
+          stackId="1"
+          stroke="#06b6d4"
+          fill="url(#colorFERSSupp)"
         />
         <Area
           type="monotone"
