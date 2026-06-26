@@ -179,7 +179,10 @@ Still open:
 - [ ] **IRMAA refinements**: 2-year MAGI lookback and Part D surcharge.
 - [x] **Tax-optimal per-account drawdown ordering**: a third withdrawal strategy that funds the
   spending gap from taxable → tax-deferred → Roth (RMDs first) with a fixed-point tax gross-up.
-  _Remaining:_ multi-year global optimization and folding the spouse's TSP into the household order.
+- [x] **Full household accounts**: the spouse's own TSP and non-TSP accounts (IRA/401k/brokerage/Roth)
+  are modeled, taxed by type, given spouse-age RMDs, counted in net worth, and folded into the
+  household drawdown (including the tax-optimal order). Works for a current or former federal spouse.
+  _Remaining:_ multi-year global tax optimization; Roth-conversion optimization.
 
 ### User Experience
 

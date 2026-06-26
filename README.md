@@ -134,6 +134,7 @@ Guaranteed income includes pension, FERS supplement, and Social Security. Non-li
 - **Taxes:** progressive 2024 brackets **inflation-indexed**, standard + age-65 deduction, **long-term capital gains (0/15/20%)**, dividend/interest drag, optional state tax, **Medicare Part B + IRMAA**
 - **Withdrawal strategies:** fixed-percent, guardrails (±10% in an 80–120% band), and **tax-optimal ordering** (fund the spending gap from taxable → tax-deferred → Roth, RMDs first, with a fixed-point tax gross-up)
 - **Special provisions:** primary **and spouse** (LEO/firefighter/ATC) — 1.7%/1.0% accrual + immediate COLA
+- **Full household picture:** spouse's own TSP **and non-TSP accounts** (IRA / 401k / brokerage / Roth) — for a current or former fed — are modeled, taxed by type, given spouse-age RMDs, counted in net worth, and **folded into the household drawdown** (including the tax-optimal order)
 - **Other:** FIRE tiers + CoastFIRE, debts/assets/college/life-events, **separation-month proration**, charts (income, expenses, **taxes**, TSP, net worth) with toggleable series
 
 **🔜 Planned / not yet modeled**
@@ -142,7 +143,7 @@ Guaranteed income includes pension, FERS supplement, and Social Security. Non-li
 - IRMAA refinements (2-year MAGI lookback, Part D surcharge)
 - Per-account cost-basis input in the account editor (engine supports it; UI uses a default)
 - Exact enforcement of mandatory retirement ages (currently surfaced as guidance)
-- Bringing the **spouse's TSP** into the tax-optimal household withdrawal order (currently drawn at a fixed rate)
+- Multi-year (global) tax optimization, and Roth-conversion optimization within the tax-optimal strategy
 
 ---
 
@@ -188,7 +189,7 @@ Guaranteed income includes pension, FERS supplement, and Social Security. Non-li
 - State tax is an optional flat rate on ordinary income + taxable SS + capital gains (excludes the non-taxable SS portion and Roth distributions); it does not model state-specific pension exemptions.
 
 **Known simplifications:**
-- The **tax-optimal** strategy is a single-year greedy ordering (taxable → tax-deferred → Roth, RMDs first) solved with a fixed-point tax gross-up; it is not a multi-year global optimization, and the spouse's TSP is still drawn at a fixed rate rather than folded into the household order.
+- The **tax-optimal** strategy is a single-year greedy ordering across the whole household (both spouses' taxable → tax-deferred → Roth, RMDs first) solved with a fixed-point tax gross-up; it is not a multi-year global optimization.
 - IRMAA uses the current year's MAGI (the real program uses a 2-year lookback) and models the Part B surcharge (not Part D).
 - Social Security benefit estimate is an approximation — actual benefit requires an SSA earnings record. CSRS service earns no SS.
 - Taxable-account dividends are treated as qualified (LTCG rates); savings-account interest is not separately taxed as ordinary income.

@@ -8,6 +8,7 @@ import type {
   ProjectionYear,
   EligibilityInfo,
   PensionBreakdown,
+  OtherAccount,
 } from '../types';
 import { DEFAULT_LIFE_EXPECTANCY } from '../types';
 import { calculateAnnualPension, calculatePensionWithColaSchedule, calculateSpouseAnnualPension } from './pensionCalculator';
@@ -122,6 +123,50 @@ function partBIrmaaAnnual(
     if (magi <= bound) return tier.monthlySurcharge * 12 * surchargeFactor;
   }
   return IRMAA_PARTB_TIERS[IRMAA_PARTB_TIERS.length - 1].monthlySurcharge * 12 * surchargeFactor;
+}
+
+/**
+ * Categorize a set of investment accounts into tax pools (deferred / Roth / taxable / illiquid)
+ * with per-pool weighted returns, annual contributions, and a starting cost basis for the
+ * taxable pool. Used for both the primary earner and the spouse.
+ */
+function buildInvestmentPools(info?: { accounts?: OtherAccount[]; totalBalance?: number }) {
+  const accounts = info?.accounts || [];
+  const category = (a: { type: string; taxDeferred?: boolean }): 'deferred' | 'roth' | 'taxable' | 'illiquid' => {
+    if (a.type === 'roth_ira') return 'roth';
+    if (a.type === 'traditional_ira' || a.type === '401k' || a.taxDeferred) return 'deferred';
+    if (a.type === 'brokerage' || a.type === 'savings') return 'taxable';
+    return 'illiquid';
+  };
+  const poolReturn = (cat: 'deferred' | 'roth' | 'taxable' | 'illiquid'): number => {
+    const accts = accounts.filter((a) => category(a) === cat);
+    const tot = accts.reduce((s, a) => s + (a.currentBalance || 0), 0);
+    if (accts.length === 0 || tot === 0) return 0.065;
+    return accts.reduce((r, a) => r + ((a.currentBalance || 0) / tot) * ((a.returnAssumption || 6.5) / 100), 0);
+  };
+  const contrib = { deferred: 0, roth: 0, taxable: 0, illiquid: 0 };
+  for (const a of accounts) contrib[category(a)] += (a.annualContribution || 0);
+  let deferred = 0, roth = 0, taxable = 0, taxableBasis = 0, illiquid = 0;
+  for (const a of accounts) {
+    const cat = category(a);
+    const bal = a.currentBalance || 0;
+    if (cat === 'deferred') deferred += bal;
+    else if (cat === 'roth') roth += bal;
+    else if (cat === 'taxable') {
+      taxable += bal;
+      taxableBasis += a.costBasis != null ? a.costBasis : (a.type === 'savings' ? bal : bal * DEFAULT_TAXABLE_BASIS_FRACTION);
+    } else illiquid += bal;
+  }
+  if (accounts.length === 0 && (info?.totalBalance || 0) > 0) {
+    taxable = info!.totalBalance!;
+    taxableBasis = taxable * DEFAULT_TAXABLE_BASIS_FRACTION;
+  }
+  return {
+    deferred, roth, taxable, taxableBasis, illiquid,
+    deferredReturn: poolReturn('deferred'), rothReturn: poolReturn('roth'),
+    taxableReturn: poolReturn('taxable'), illiquidReturn: poolReturn('illiquid'),
+    contribDeferred: contrib.deferred, contribRoth: contrib.roth, contribTaxable: contrib.taxable, contribIlliquid: contrib.illiquid,
+  };
 }
 
 /**
@@ -399,8 +444,16 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     spouseIsSpecial = resolveSpecialYears(spouse, s.fersYears, s.specialYears) > 0;
   }
 
-  // Track spouse TSP balance throughout projection
+  // Track spouse TSP balance throughout projection (TSP is treated as tax-deferred)
   let spouseTspBalance = spouse?.tspCurrentBalance || 0;
+  const spouseTspReturn = (spouse?.tspReturnAssumption ?? 6.5) / 100;
+  // Spouse's own non-TSP accounts (IRA / 401k / brokerage / Roth), categorized by tax pool.
+  const spPools = buildInvestmentPools(spouse?.otherInvestments);
+  let spDeferredBalance = spPools.deferred, spRothBalance = spPools.roth;
+  let spTaxableBalance = spPools.taxable, spTaxableBasis = spPools.taxableBasis, spIlliquidBalance = spPools.illiquid;
+  // Spouse RMD start age (by spouse birth year, approximated from current age).
+  const spouseBirthYear = currentYear - spouseCurrentAge;
+  const spouseRmdAge = rmdStartAge(spouseBirthYear);
 
   // Annual living expenses (base amount in today's dollars)
   const baseLivingExpenses = profile.assumptions.annualLivingExpenses || 60000;
@@ -577,63 +630,63 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       nonFederal401kBalance *= (1 + nonFed401kReturnRate / 100);
     }
 
-    // ── Full spouse income modeling ───────────────────────────────────────────
+    // ── Spouse income (accumulation here; account drawdown happens in the consolidated block) ──
     let spouseIncome = 0;
     let spousePension = 0;
-    let spouseTspDistribution = 0;
     let spouseSocialSecurity = 0;
+    // Spouse account withdrawals (set in the consolidated household block below).
+    let spouseTspDistribution = 0;
+    let spouseOtherDeferredDistribution = 0, spouseOtherRothDistribution = 0;
+    let spouseOtherTaxableDistribution = 0, spouseOtherTaxableGains = 0, spouseOtherTaxableDividends = 0;
+    const currentSpouseAge = spouse ? spouseCurrentAge + (age - currentAge) : 0;
+    const spouseStillWorking = spouse ? currentSpouseAge < spouseLeaveServiceAge : false;
+    const canAccessSpouseTSP = spouse ? (currentSpouseAge >= 59.5 ||
+      (spouseLeaveServiceAge >= 55 && currentSpouseAge >= spouseLeaveServiceAge)) : false;
+    const spouseAccessible = spouse !== null && !spouseStillWorking && canAccessSpouseTSP;
 
     if (spouse) {
-      const currentSpouseAge = spouseCurrentAge + (age - currentAge);
-      const spouseStillWorking = currentSpouseAge < spouseLeaveServiceAge;
       const spouseHasClaimed = currentSpouseAge >= spouseRetirementAge;
 
       if (spouseStillWorking) {
-        // Spouse is still working — accumulate TSP contributions
-        const spouseTspContrib = spouse.tspAnnualContribution || 0;
-        spouseTspBalance += spouseTspContrib;
-        spouseTspBalance *= (1 + (spouse.tspReturnAssumption ?? 6.5) / 100);
-
+        // Spouse still working — accumulate TSP and their own accounts (contributions + growth).
+        spouseTspBalance = (spouseTspBalance + (spouse.tspAnnualContribution || 0)) * (1 + spouseTspReturn);
+        spDeferredBalance = Math.max(0, (spDeferredBalance + spPools.contribDeferred) * (1 + spPools.deferredReturn));
+        spRothBalance = Math.max(0, (spRothBalance + spPools.contribRoth) * (1 + spPools.rothReturn));
+        const sBal = Math.max(0, spTaxableBalance + spPools.contribTaxable);
+        const sDiv = sBal * taxableDividendYield;
+        spTaxableBasis = Math.max(0, spTaxableBasis + spPools.contribTaxable + sDiv);
+        spTaxableBalance = sBal * (1 + spPools.taxableReturn);
+        spIlliquidBalance = Math.max(0, (spIlliquidBalance + spPools.contribIlliquid) * (1 + spPools.illiquidReturn));
         spouseIncome = spouseCurrentIncome;
       } else {
-        // Spouse has left employment — grow or draw down TSP
-        const canAccessSpouseTSP = currentSpouseAge >= 59.5 ||
-          (spouseLeaveServiceAge >= 55 && currentSpouseAge >= spouseLeaveServiceAge);
-
-        if (canAccessSpouseTSP) {
-          spouseTspDistribution = spouseTspBalance * (drawdownRate / 100);
-          spouseTspBalance = (spouseTspBalance - spouseTspDistribution) *
-            (1 + (spouse.tspReturnAssumption ?? 6.5) / 100);
-        } else {
-          spouseTspBalance *= (1 + (spouse.tspReturnAssumption ?? 6.5) / 100);
-        }
-
         // Spouse federal pension (with COLA from the year they claimed)
         if (spouseHasClaimed && spouseBasePension > 0) {
           spousePension = calculatePensionWithColaSchedule(
-            spouseBasePension,
-            spouseSystem,
-            currentSpouseAge,
-            spouseRetirementAge,
-            profile.assumptions.colaRate,
-            spouseIsSpecial
+            spouseBasePension, spouseSystem, currentSpouseAge, spouseRetirementAge,
+            profile.assumptions.colaRate, spouseIsSpecial
           );
         }
-
         // Spouse Social Security (at age 67)
         if (currentSpouseAge >= 67) {
           if (spouse.socialSecurityEstimate && spouse.socialSecurityEstimate > 0) {
             spouseSocialSecurity = spouse.socialSecurityEstimate;
           } else if (spouse.currentIncome) {
-            // Rough fallback: ~35% of working income as SS estimate
-            spouseSocialSecurity = spouse.currentIncome * 0.35;
+            spouseSocialSecurity = spouse.currentIncome * 0.35; // rough fallback
           }
         }
-
-        // Total spouse retirement income: auto-calculated pension + TSP + SS,
-        // plus any manually specified additional retirement income
-        const manualExtra = spouse.retirementIncome || 0;
-        spouseIncome = spousePension + spouseTspDistribution + spouseSocialSecurity + manualExtra;
+        // Pension + SS + manual extra. Account withdrawals are added via the household block.
+        spouseIncome = spousePension + spouseSocialSecurity + (spouse.retirementIncome || 0);
+        // If not yet able to access accounts, grow them in place (no drawdown).
+        if (!canAccessSpouseTSP) {
+          spouseTspBalance *= (1 + spouseTspReturn);
+          spDeferredBalance *= (1 + spPools.deferredReturn);
+          spRothBalance *= (1 + spPools.rothReturn);
+          const sBal = spTaxableBalance;
+          const sDiv = sBal * taxableDividendYield;
+          spTaxableBasis = Math.max(0, spTaxableBasis + sDiv);
+          spTaxableBalance = sBal * (1 + spPools.taxableReturn);
+        }
+        spIlliquidBalance = Math.max(0, spIlliquidBalance * (1 + spPools.illiquidReturn));
       }
     }
 
@@ -770,39 +823,46 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     // Calculate total debt
     const totalDebt = debts.reduce((sum, d) => sum + d.currentBalance, 0);
 
-    // ── Consolidated retirement withdrawals (primary accounts) ────────────────────
+    // ── Consolidated household retirement withdrawals (primary + spouse) ──────────
     // Decided here, after expenses & guaranteed income are known, so the tax-optimal
-    // strategy can fund the spending gap in tax-preferred order. Tax context computed once.
+    // strategy can fund the spending gap in tax-preferred order across BOTH spouses'
+    // accounts. Each person's accounts are only drawn when that person can access them.
     const filingStatus: FilingStatus = spouse ? 'married' : 'single';
     const spouseAgeThisYear = spouse ? spouseCurrentAge + (age - currentAge) : undefined;
     const taxInflationFactor = Math.pow(1 + profile.assumptions.inflationRate / 100, Math.max(0, year - TAX_BRACKET_BASE_YEAR));
+    const primaryRetired = !stillWorking;
+    const primaryAccess = primaryRetired && canAccessTSP;
 
-    if (!stillWorking) {
-      const spouseWorkingIncome = (spouse && spouseCurrentAge + (age - currentAge) < spouseLeaveServiceAge) ? spouseCurrentIncome : 0;
+    if (primaryAccess || spouseAccessible) {
+      const spouseWorkingIncome = spouseStillWorking ? spouseCurrentIncome : 0;
+      // Mandatory RMDs (primary by their age, spouse by theirs).
+      const tspRmd = primaryAccess && age >= rmdAge ? requiredMinimumDistribution(tspTradBalance, age) : 0;
+      const nonFedRmd = primaryAccess && age >= rmdAge ? requiredMinimumDistribution(nonFederal401kBalance, age) : 0;
+      const otherDefRmd = primaryAccess && age >= rmdAge ? requiredMinimumDistribution(otherDeferredBalance, age) : 0;
+      const spTspRmd = spouseAccessible && currentSpouseAge >= spouseRmdAge ? requiredMinimumDistribution(spouseTspBalance, currentSpouseAge) : 0;
+      const spDefRmd = spouseAccessible && currentSpouseAge >= spouseRmdAge ? requiredMinimumDistribution(spDeferredBalance, currentSpouseAge) : 0;
+      const pGainFrac = otherTaxableBalance > 0 ? Math.max(0, (otherTaxableBalance - otherTaxableBasis) / otherTaxableBalance) : 0;
+      const sGainFrac = spTaxableBalance > 0 ? Math.max(0, (spTaxableBalance - spTaxableBasis) / spTaxableBalance) : 0;
 
-      if (profile.assumptions.withdrawalStrategy === 'tax_optimal' && canAccessTSP) {
-        // Mandatory RMDs from each deferred pool (taken regardless of spending need).
-        const tspRmd = age >= rmdAge ? requiredMinimumDistribution(tspTradBalance, age) : 0;
-        const nonFedRmd = age >= rmdAge ? requiredMinimumDistribution(nonFederal401kBalance, age) : 0;
-        const otherDefRmd = age >= rmdAge ? requiredMinimumDistribution(otherDeferredBalance, age) : 0;
-        const totalRmd = tspRmd + nonFedRmd + otherDefRmd;
-
-        // Income fixed before discretionary withdrawals (RMDs are ordinary income).
+      if (profile.assumptions.withdrawalStrategy === 'tax_optimal') {
+        const totalRmd = tspRmd + nonFedRmd + otherDefRmd + spTspRmd + spDefRmd;
         const baseOrdinary = pension + fersSupplement + otherIncome + lumpSumLeavePayout + vsipPayout +
-          spousePension + spouseTspDistribution + spouseWorkingIncome + (spouse?.retirementIncome || 0) + totalRmd;
+          spousePension + spouseWorkingIncome + (spouse?.retirementIncome || 0) + totalRmd;
         const ssIncome = socialSecurity + spouseSocialSecurity;
-        const gainFraction = otherTaxableBalance > 0 ? Math.max(0, (otherTaxableBalance - otherTaxableBasis) / otherTaxableBalance) : 0;
-
-        // Pools available for discretionary withdrawal, in tax-preferred order.
-        const taxableAvail = otherTaxableBalance;
-        const deferredAvail = Math.max(0, tspTradBalance - tspRmd) + Math.max(0, nonFederal401kBalance - nonFedRmd) + Math.max(0, otherDeferredBalance - otherDefRmd);
-        const rothAvail = tspRothBalance + otherRothBalance;
+        const pTaxAvail = primaryAccess ? otherTaxableBalance : 0;
+        const taxableAvail = pTaxAvail + (spouseAccessible ? spTaxableBalance : 0);
+        const deferredAvail = (primaryAccess ? Math.max(0, tspTradBalance - tspRmd) + Math.max(0, nonFederal401kBalance - nonFedRmd) + Math.max(0, otherDeferredBalance - otherDefRmd) : 0) +
+          (spouseAccessible ? Math.max(0, spouseTspBalance - spTspRmd) + Math.max(0, spDeferredBalance - spDefRmd) : 0);
+        const rothAvail = (primaryAccess ? tspRothBalance + otherRothBalance : 0) + (spouseAccessible ? spRothBalance : 0);
 
         // Fixed-point solve: cover expenses after tax, withdrawing taxable -> deferred -> Roth.
         let dt = 0, dd = 0, dr = 0;
         for (let iter = 0; iter < 6; iter++) {
-          const taxableGains = dt * gainFraction;
-          const dividends = Math.max(0, otherTaxableBalance - dt) * taxableDividendYield;
+          const dtP = Math.min(pTaxAvail, dt);
+          const dtS = dt - dtP;
+          const taxableGains = dtP * pGainFrac + dtS * sGainFrac;
+          const dividends = (primaryAccess ? Math.max(0, otherTaxableBalance - dtP) : 0) * taxableDividendYield +
+            (spouseAccessible ? Math.max(0, spTaxableBalance - dtS) : 0) * taxableDividendYield;
           const tax = calculateRetirementTax({
             ordinaryIncome: Math.max(0, baseOrdinary + dd),
             socialSecurityIncome: Math.max(0, ssIncome),
@@ -817,67 +877,99 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
           dr = Math.min(rothAvail, rem); rem -= dr;
         }
 
-        // Map discretionary amounts back to specific accounts (deferred order: TSP -> 401k -> IRA).
-        otherTaxableDistribution = dt;
+        // Taxable: primary first, then spouse.
+        const dtP = Math.min(pTaxAvail, dt);
+        if (primaryAccess) otherTaxableDistribution = dtP;
+        if (spouseAccessible) spouseOtherTaxableDistribution = dt - dtP;
+        // Deferred (RMDs forced): primary TSP -> non-fed 401k -> IRA, then spouse TSP -> IRA.
         let defLeft = dd;
-        const tspTradDisc = Math.min(Math.max(0, tspTradBalance - tspRmd), defLeft); defLeft -= tspTradDisc;
-        const nonFedDisc = Math.min(Math.max(0, nonFederal401kBalance - nonFedRmd), defLeft); defLeft -= nonFedDisc;
-        const otherDefDisc = Math.min(Math.max(0, otherDeferredBalance - otherDefRmd), defLeft);
-        tspTradDistribution = tspRmd + tspTradDisc;
-        nonFed401kDistribution = nonFedRmd + nonFedDisc;
-        otherDeferredDistribution = otherDefRmd + otherDefDisc;
+        if (primaryAccess) {
+          const a = Math.min(Math.max(0, tspTradBalance - tspRmd), defLeft); defLeft -= a;
+          const b = Math.min(Math.max(0, nonFederal401kBalance - nonFedRmd), defLeft); defLeft -= b;
+          const c = Math.min(Math.max(0, otherDeferredBalance - otherDefRmd), defLeft); defLeft -= c;
+          tspTradDistribution = tspRmd + a;
+          nonFed401kDistribution = nonFedRmd + b;
+          otherDeferredDistribution = otherDefRmd + c;
+        }
+        if (spouseAccessible) {
+          const e = Math.min(Math.max(0, spouseTspBalance - spTspRmd), defLeft); defLeft -= e;
+          const f = Math.min(Math.max(0, spDeferredBalance - spDefRmd), defLeft); defLeft -= f;
+          spouseTspDistribution = spTspRmd + e;
+          spouseOtherDeferredDistribution = spDefRmd + f;
+        }
+        // Roth (last): primary TSP Roth -> IRA Roth, then spouse Roth.
         let rothLeft = dr;
-        tspRothDistribution = Math.min(tspRothBalance, rothLeft); rothLeft -= tspRothDistribution;
-        otherRothDistribution = Math.min(otherRothBalance, rothLeft);
+        if (primaryAccess) {
+          tspRothDistribution = Math.min(tspRothBalance, rothLeft); rothLeft -= tspRothDistribution;
+          otherRothDistribution = Math.min(otherRothBalance, rothLeft); rothLeft -= otherRothDistribution;
+        }
+        if (spouseAccessible) {
+          spouseOtherRothDistribution = Math.min(spRothBalance, rothLeft); rothLeft -= spouseOtherRothDistribution;
+        }
         tspDistribution = tspTradDistribution + tspRothDistribution;
       } else {
-        // Rate-based (fixed_percent / guardrails): each pool at the effective withdrawal rate,
-        // with an RMD floor on deferred balances. (Reproduces the original per-pool behavior.)
-        const totalTSPForDist = tspTradBalance + tspRothBalance;
-        tspDistribution = canAccessTSP ? totalTSPForDist * (effectiveWithdrawalRate / 100) : 0;
-        const rf = totalTSPForDist > 0 ? tspRothBalance / totalTSPForDist : 0;
-        tspRothDistribution = tspDistribution * rf;
-        tspTradDistribution = tspDistribution - tspRothDistribution;
-        if (canAccessTSP && age >= rmdAge) {
-          const rmd = requiredMinimumDistribution(tspTradBalance, age);
-          if (rmd > tspTradDistribution) { tspTradDistribution = Math.min(rmd, tspTradBalance); tspDistribution = tspTradDistribution + tspRothDistribution; }
-        }
-        if (canAccessTSP && nonFederal401kBalance > 0) {
-          nonFed401kDistribution = nonFederal401kBalance * (effectiveWithdrawalRate / 100);
-          if (age >= rmdAge) { const rmd = requiredMinimumDistribution(nonFederal401kBalance, age); if (rmd > nonFed401kDistribution) nonFed401kDistribution = Math.min(rmd, nonFederal401kBalance); }
-        }
-        if (canAccessTSP) {
+        // Rate-based (fixed_percent / guardrails): each accessible account at the rate, RMD floor.
+        if (primaryAccess) {
+          const totalTSPForDist = tspTradBalance + tspRothBalance;
+          tspDistribution = totalTSPForDist * (effectiveWithdrawalRate / 100);
+          const rf = totalTSPForDist > 0 ? tspRothBalance / totalTSPForDist : 0;
+          tspRothDistribution = tspDistribution * rf;
+          tspTradDistribution = tspDistribution - tspRothDistribution;
+          if (age >= rmdAge && tspRmd > tspTradDistribution) { tspTradDistribution = Math.min(tspRmd, tspTradBalance); tspDistribution = tspTradDistribution + tspRothDistribution; }
+          if (nonFederal401kBalance > 0) {
+            nonFed401kDistribution = nonFederal401kBalance * (effectiveWithdrawalRate / 100);
+            if (nonFedRmd > nonFed401kDistribution) nonFed401kDistribution = Math.min(nonFedRmd, nonFederal401kBalance);
+          }
           otherDeferredDistribution = otherDeferredBalance * (effectiveWithdrawalRate / 100);
-          if (age >= rmdAge) { const rmd = requiredMinimumDistribution(otherDeferredBalance, age); if (rmd > otherDeferredDistribution) otherDeferredDistribution = Math.min(rmd, otherDeferredBalance); }
+          if (otherDefRmd > otherDeferredDistribution) otherDeferredDistribution = Math.min(otherDefRmd, otherDeferredBalance);
           otherRothDistribution = otherRothBalance * (effectiveWithdrawalRate / 100);
           otherTaxableDistribution = otherTaxableBalance * (effectiveWithdrawalRate / 100);
         }
+        if (spouseAccessible) {
+          spouseTspDistribution = spouseTspBalance * (drawdownRate / 100);
+          if (spTspRmd > spouseTspDistribution) spouseTspDistribution = Math.min(spTspRmd, spouseTspBalance);
+          spouseOtherDeferredDistribution = spDeferredBalance * (drawdownRate / 100);
+          if (spDefRmd > spouseOtherDeferredDistribution) spouseOtherDeferredDistribution = Math.min(spDefRmd, spDeferredBalance);
+          spouseOtherRothDistribution = spRothBalance * (drawdownRate / 100);
+          spouseOtherTaxableDistribution = spTaxableBalance * (drawdownRate / 100);
+        }
       }
 
-      // Realized gain portion of the taxable withdrawal.
-      const gainFrac = otherTaxableBalance > 0 ? Math.max(0, (otherTaxableBalance - otherTaxableBasis) / otherTaxableBalance) : 0;
-      otherTaxableGains = otherTaxableDistribution * gainFrac;
+      // Realized gains on taxable withdrawals.
+      otherTaxableGains = otherTaxableDistribution * pGainFrac;
+      spouseOtherTaxableGains = spouseOtherTaxableDistribution * sGainFrac;
 
-      // Apply: TSP Roth conversion (taxable), then (balance − distribution) × growth per pool.
-      const conversionAmount = Math.min(profile.tsp.rothConversionAnnual || 0, tspTradBalance);
-      tspTradBalance -= conversionAmount;
-      tspRothBalance += conversionAmount;
-      tspTradBalance = Math.max(0, (tspTradBalance - tspTradDistribution) * (1 + returnRate / 100));
-      tspRothBalance = Math.max(0, (tspRothBalance - tspRothDistribution) * (1 + returnRate / 100));
-
-      nonFederal401kBalance = Math.max(0, (nonFederal401kBalance - nonFed401kDistribution) * (1 + nonFed401kReturnRate / 100));
-
-      otherDeferredBalance = Math.max(0, (otherDeferredBalance - otherDeferredDistribution) * (1 + deferredReturn));
-      otherRothBalance = Math.max(0, (otherRothBalance - otherRothDistribution) * (1 + rothReturn));
-      const taxablePrincipalWithdrawn = otherTaxableDistribution - otherTaxableGains;
-      const balAfter = Math.max(0, otherTaxableBalance - otherTaxableDistribution);
-      otherTaxableDividends = balAfter * taxableDividendYield;
-      otherTaxableBasis = Math.max(0, otherTaxableBasis - taxablePrincipalWithdrawn + otherTaxableDividends);
-      otherTaxableBalance = balAfter * (1 + taxableReturn);
+      // Apply primary growth (retired): Roth conversion, then (balance − distribution) × growth.
+      if (primaryRetired) {
+        const conversionAmount = Math.min(profile.tsp.rothConversionAnnual || 0, tspTradBalance);
+        tspTradBalance -= conversionAmount;
+        tspRothBalance += conversionAmount;
+        tspTradBalance = Math.max(0, (tspTradBalance - tspTradDistribution) * (1 + returnRate / 100));
+        tspRothBalance = Math.max(0, (tspRothBalance - tspRothDistribution) * (1 + returnRate / 100));
+        nonFederal401kBalance = Math.max(0, (nonFederal401kBalance - nonFed401kDistribution) * (1 + nonFed401kReturnRate / 100));
+        otherDeferredBalance = Math.max(0, (otherDeferredBalance - otherDeferredDistribution) * (1 + deferredReturn));
+        otherRothBalance = Math.max(0, (otherRothBalance - otherRothDistribution) * (1 + rothReturn));
+        const pBalAfter = Math.max(0, otherTaxableBalance - otherTaxableDistribution);
+        otherTaxableDividends = pBalAfter * taxableDividendYield;
+        otherTaxableBasis = Math.max(0, otherTaxableBasis - (otherTaxableDistribution - otherTaxableGains) + otherTaxableDividends);
+        otherTaxableBalance = pBalAfter * (1 + taxableReturn);
+      }
+      // Apply spouse growth (accessible).
+      if (spouseAccessible) {
+        spouseTspBalance = Math.max(0, (spouseTspBalance - spouseTspDistribution) * (1 + spouseTspReturn));
+        spDeferredBalance = Math.max(0, (spDeferredBalance - spouseOtherDeferredDistribution) * (1 + spPools.deferredReturn));
+        spRothBalance = Math.max(0, (spRothBalance - spouseOtherRothDistribution) * (1 + spPools.rothReturn));
+        const sBalAfter = Math.max(0, spTaxableBalance - spouseOtherTaxableDistribution);
+        spouseOtherTaxableDividends = sBalAfter * taxableDividendYield;
+        spTaxableBasis = Math.max(0, spTaxableBasis - (spouseOtherTaxableDistribution - spouseOtherTaxableGains) + spouseOtherTaxableDividends);
+        spTaxableBalance = sBalAfter * (1 + spPools.taxableReturn);
+      }
     }
 
     tspBalance = tspTradBalance + tspRothBalance;
-    otherInvestmentsDistribution = otherDeferredDistribution + otherRothDistribution + otherTaxableDistribution + nonFed401kDistribution;
+    const spouseOtherBalance = spDeferredBalance + spRothBalance + spTaxableBalance + spIlliquidBalance;
+    otherInvestmentsDistribution = otherDeferredDistribution + otherRothDistribution + otherTaxableDistribution + nonFed401kDistribution +
+      spouseTspDistribution + spouseOtherDeferredDistribution + spouseOtherRothDistribution + spouseOtherTaxableDistribution;
     otherInvestmentsBalance = otherDeferredBalance + otherRothBalance + otherTaxableBalance + otherIlliquidBalance;
 
     // Total income (pension + TSP + Social Security + FERS Supplement + other sources
@@ -893,12 +985,15 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       : 0;
     // Deferred non-TSP withdrawals (Traditional IRA/401k + non-federal 401k) are ordinary
     // income; Roth withdrawals are excluded; taxable-account gains are taxed as capital gains.
+    // Spouse deferred withdrawals (TSP + IRA/401k) are ordinary income; spouse Roth is excluded;
+    // spouse taxable gains/dividends are capital gains (combined with the primary's below).
     const ordinaryIncome = pension + fersSupplement + tspTradDistribution + rothConversionThisYear +
       otherIncome + otherDeferredDistribution + nonFed401kDistribution + lumpSumLeavePayout + vsipPayout +
-      spousePension + spouseTspDistribution +
+      spousePension + spouseTspDistribution + spouseOtherDeferredDistribution +
       (spouse && spouseCurrentAge + (age - currentAge) < spouseLeaveServiceAge ? spouseCurrentIncome : 0) +
       (spouse?.retirementIncome || 0);
     const totalSSIncome = socialSecurity + spouseSocialSecurity;
+    const householdCapitalGains = otherTaxableGains + otherTaxableDividends + spouseOtherTaxableGains + spouseOtherTaxableDividends;
     const taxResult = calculateRetirementTax({
       ordinaryIncome: Math.max(0, ordinaryIncome),
       socialSecurityIncome: Math.max(0, totalSSIncome),
@@ -907,14 +1002,14 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       spouseAge: spouseAgeThisYear,
       stateTaxRate: profile.assumptions.stateTaxRate,
       // Realized gains at sale + annual qualified dividends/interest, both taxed at LTCG rates.
-      capitalGains: otherTaxableGains + otherTaxableDividends,
+      capitalGains: householdCapitalGains,
       inflationFactor: taxInflationFactor,
     });
 
     // ── Medicare Part B IRMAA surcharge (high-income) ─────────────────────────────
     // Based on modified AGI (here: federal AGI + realized gains). Each Medicare-enrolled
     // person in the household pays their own surcharge based on the household MAGI.
-    const magi = Math.max(0, ordinaryIncome + taxResult.taxableSSBenefit + Math.max(0, otherTaxableGains + otherTaxableDividends));
+    const magi = Math.max(0, ordinaryIncome + taxResult.taxableSSBenefit + Math.max(0, householdCapitalGains));
     const irmaaSurchargeFactor = Math.pow(1 + profile.assumptions.healthcareInflation / 100, Math.max(0, year - 2024));
     let irmaaSurcharge = 0;
     if (age >= 65 && !stillWorking) {
@@ -964,15 +1059,15 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     // FI and CoastFIRE: latch true only for the first year each condition is met.
     // Liquid worth counts all household investment assets (primary TSP, spouse TSP,
     // other investments, and any non-rolled-over non-federal 401k).
-    const liquidWorth = tspBalance + otherInvestmentsBalance + spouseTspBalance + nonFederal401kBalance;
+    const liquidWorth = tspBalance + otherInvestmentsBalance + spouseTspBalance + spouseOtherBalance + nonFederal401kBalance;
     const fiThisYear = !fiAchieved && liquidWorth >= adjustedFireNumber && adjustedFireNumber > 0;
     const coastThisYear = !coastAchieved && liquidWorth >= coastFIRENumber && coastFIRENumber > 0;
     if (fiThisYear) fiAchieved = true;
     if (coastThisYear) coastAchieved = true;
 
-    // Calculate net worth (includes spouse TSP and non-federal 401k in household wealth)
-    const netWorth = tspBalance + otherInvestmentsBalance + spouseTspBalance + nonFederal401kBalance + totalAssetValue - totalDebt;
-    const liquidNetWorth = tspBalance + otherInvestmentsBalance + spouseTspBalance + nonFederal401kBalance - totalDebt;
+    // Calculate net worth (includes both spouses' TSP + accounts and non-federal 401k)
+    const netWorth = tspBalance + otherInvestmentsBalance + spouseTspBalance + spouseOtherBalance + nonFederal401kBalance + totalAssetValue - totalDebt;
+    const liquidNetWorth = tspBalance + otherInvestmentsBalance + spouseTspBalance + spouseOtherBalance + nonFederal401kBalance - totalDebt;
 
     // Cumulative savings
     cumulativeSavings += netIncome;

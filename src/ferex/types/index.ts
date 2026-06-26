@@ -56,10 +56,12 @@ export interface SpouseInfo {
   high3Salary?: number; // High-3 average salary for spouse pension calculation
   sickLeaveHours?: number; // Unused sick leave hours
   specialProvisionType?: SpecialProvisionType; // FERS special provisions (LEO/FF/ATC) for the spouse
-  // Spouse TSP
+  // Spouse TSP (from current OR former federal service)
   tspCurrentBalance?: number; // Current TSP balance for spouse
   tspAnnualContribution?: number; // Annual employee TSP contribution while working
   tspReturnAssumption?: number; // Expected annual return % (default 6.5%)
+  // Spouse's own non-TSP accounts (IRA / 401k / brokerage / Roth / etc.) — from any employer
+  otherInvestments?: OtherInvestmentsInfo;
   // Spouse Social Security
   socialSecurityEstimate?: number; // Annual SS estimate from SSA.gov (at their full retirement age)
 }

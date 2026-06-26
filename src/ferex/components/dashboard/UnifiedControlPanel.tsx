@@ -170,6 +170,9 @@ export function UnifiedControlPanel({
   const [spouseSpecialProvision, setSpouseSpecialProvision] = useState<SpecialProvisionType>(
     profile.personal.spouseInfo?.specialProvisionType || 'none'
   );
+  const [spouseOtherAccounts, setSpouseOtherAccounts] = useState<OtherAccount[]>(
+    profile.personal.spouseInfo?.otherInvestments?.accounts || []
+  );
   // FIRE Settings
   const [withdrawalStrategy, setWithdrawalStrategy] = useState<'fixed_percent' | 'guardrails' | 'tax_optimal'>(
     profile.assumptions.withdrawalStrategy || 'fixed_percent'
@@ -316,6 +319,20 @@ export function UnifiedControlPanel({
 
   const removeOtherAccount = (id: string) => {
     setOtherAccounts(otherAccounts.filter((a) => a.id !== id));
+  };
+
+  // Spouse's own non-TSP accounts (IRA / 401k / brokerage / Roth / etc.)
+  const addSpouseAccount = () => {
+    setSpouseOtherAccounts([
+      ...spouseOtherAccounts,
+      { id: `sp-account-${Date.now()}`, name: 'New Account', type: 'brokerage', currentBalance: 0, returnAssumption: 6.5 },
+    ]);
+  };
+  const updateSpouseAccount = (id: string, updates: Partial<OtherAccount>) => {
+    setSpouseOtherAccounts(spouseOtherAccounts.map((a) => (a.id === id ? { ...a, ...updates } : a)));
+  };
+  const removeSpouseAccount = (id: string) => {
+    setSpouseOtherAccounts(spouseOtherAccounts.filter((a) => a.id !== id));
   };
 
   const addChild = () => {
@@ -466,6 +483,11 @@ export function UnifiedControlPanel({
               high3Salary: spouseIsFederal ? spouseHigh3 : undefined,
               sickLeaveHours: spouseIsFederal ? spouseSickLeave : undefined,
               specialProvisionType: spouseIsFederal ? spouseSpecialProvision : undefined,
+              // Spouse's own non-TSP accounts apply whether or not they are a federal employee
+              otherInvestments: {
+                accounts: spouseOtherAccounts,
+                totalBalance: spouseOtherAccounts.reduce((sum, acc) => sum + acc.currentBalance, 0),
+              },
             }
           : undefined,
       },
@@ -1465,9 +1487,9 @@ export function UnifiedControlPanel({
                           className="w-4 h-4"
                         />
                         <div>
-                          <div className="font-medium text-sm">Worked for Federal Government</div>
+                          <div className="font-medium text-sm">Current or former federal employee</div>
                           <div className="text-xs text-gray-500">
-                            Track spouse's federal pension
+                            Track spouse's FERS/CSRS pension, TSP, and special provisions (works for former feds too)
                           </div>
                         </div>
                       </label>
@@ -1592,6 +1614,54 @@ export function UnifiedControlPanel({
                           </div>
                         </div>
                       )}
+
+                      {/* Spouse's own accounts (IRA / 401k / brokerage / Roth) — fed or not */}
+                      <div className="mt-3 pt-3 border-t">
+                        <h5 className="text-xs font-medium mb-2">Spouse Investment Accounts</h5>
+                        <div className="space-y-2 mb-2">
+                          {spouseOtherAccounts.map((account) => (
+                            <Card key={account.id} className="p-2 bg-purple-50 text-xs">
+                              <div className="flex justify-between mb-1">
+                                <input
+                                  type="text"
+                                  value={account.name}
+                                  onChange={(e) => updateSpouseAccount(account.id, { name: e.target.value })}
+                                  className="font-medium bg-transparent border-b border-transparent hover:border-gray-300 text-xs w-28"
+                                />
+                                <button onClick={() => removeSpouseAccount(account.id)} className="text-red-600">Remove</button>
+                              </div>
+                              <div className="grid grid-cols-2 gap-1">
+                                <select
+                                  value={account.type}
+                                  onChange={(e) => updateSpouseAccount(account.id, { type: e.target.value as OtherAccountType })}
+                                  className="px-1 py-1 border rounded text-xs"
+                                >
+                                  <option value="traditional_ira">Trad IRA</option>
+                                  <option value="roth_ira">Roth IRA</option>
+                                  <option value="401k">401(k)</option>
+                                  <option value="brokerage">Brokerage</option>
+                                  <option value="savings">Savings</option>
+                                  <option value="real_estate">Real Estate</option>
+                                  <option value="other">Other</option>
+                                </select>
+                                <input
+                                  type="number"
+                                  value={account.currentBalance}
+                                  onChange={(e) => updateSpouseAccount(account.id, { currentBalance: parseInt(e.target.value) || 0 })}
+                                  className="px-1 py-1 border rounded text-xs"
+                                  placeholder="Balance"
+                                />
+                              </div>
+                            </Card>
+                          ))}
+                        </div>
+                        <Button variant="outline" onClick={addSpouseAccount} className="w-full text-xs h-7" size="sm">
+                          + Add Spouse Account
+                        </Button>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Folded into the household drawdown (and tax-optimal order), taxed by type.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 )}
