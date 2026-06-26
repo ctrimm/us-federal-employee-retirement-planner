@@ -11,7 +11,7 @@ import type {
 } from '../types';
 import { DEFAULT_LIFE_EXPECTANCY } from '../types';
 import { calculateAnnualPension, calculatePensionWithColaSchedule, calculateSpouseAnnualPension } from './pensionCalculator';
-import { calculateEmployerMatch } from './tspCalculator';
+import { calculateEmployerMatch, requiredMinimumDistribution, rmdStartAge } from './tspCalculator';
 import { calculateAnnualFEHBCost } from './fehbCalculator';
 import {
   calculateTotalService,
@@ -22,7 +22,7 @@ import {
   calculateServiceBySystem,
   creditableServicePeriods,
 } from './systemDetection';
-import { calculateRetirementTax } from './taxCalculator';
+import { calculateRetirementTax, TAX_BRACKET_BASE_YEAR } from './taxCalculator';
 import type { FilingStatus } from './taxCalculator';
 import {
   MEDICARE_PART_B_MONTHLY_2024, LEAN_FIRE_MULTIPLIER, CHUBBY_FIRE_MULTIPLIER, FAT_FIRE_MULTIPLIER,
@@ -209,6 +209,9 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     profile.personal.birthYear
   );
 
+  // Age at which Traditional TSP RMDs begin (SECURE 2.0: 73 or 75 by birth year).
+  const rmdAge = rmdStartAge(profile.personal.birthYear);
+
   // VERA early-out: eligible at age 50 with 20+ years, or any age with 25+ years.
   const mraForSupplement = calculateMRA(profile.personal.birthYear);
   const veraEligibleForSupplement = profile.retirement.earlyOutVERA === true &&
@@ -386,10 +389,21 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     // TSP distribution with age 55+ separation rule (Traditional + Roth proportional)
     const canAccessTSP = !stillWorking && (age >= 59.5 || (leaveServiceAge >= 55 && age >= leaveServiceAge));
     const totalTSPForDist = tspTradBalance + tspRothBalance;
-    const tspDistribution = canAccessTSP ? totalTSPForDist * (effectiveWithdrawalRate / 100) : 0;
+    let tspDistribution = canAccessTSP ? totalTSPForDist * (effectiveWithdrawalRate / 100) : 0;
     const rothFraction = totalTSPForDist > 0 ? tspRothBalance / totalTSPForDist : 0;
     const tspRothDistribution = tspDistribution * rothFraction;
-    const tspTradDistribution = tspDistribution - tspRothDistribution;
+    let tspTradDistribution = tspDistribution - tspRothDistribution;
+
+    // Required Minimum Distributions: once RMD age is reached (and separated from service),
+    // the Traditional balance must distribute at least the IRS Uniform Lifetime amount. This
+    // forces taxable income even if the chosen drawdown rate is lower. Roth TSP has no RMD.
+    if (canAccessTSP && age >= rmdAge) {
+      const rmd = requiredMinimumDistribution(tspTradBalance, age);
+      if (rmd > tspTradDistribution) {
+        tspTradDistribution = Math.min(rmd, tspTradBalance);
+        tspDistribution = tspTradDistribution + tspRothDistribution;
+      }
+    }
 
     // TSP balance update: Roth conversion (Traditional→Roth, taxable), then distributions + growth
     if (!stillWorking) {
@@ -661,16 +675,19 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     const filingStatus: FilingStatus = spouse ? 'married' : 'single';
     const spouseAgeThisYear = spouse ? spouseCurrentAge + (age - currentAge) : undefined;
     // Ordinary income: Traditional pension/TSP are taxable; Roth TSP distributions are NOT.
-    // Roth conversions ARE taxable in the year of conversion.
+    // Roth conversions ARE taxable in the year of conversion. Earned income (part-time/
+    // Barista-FIRE wages and side-hustle/self-employment) is fully taxable ordinary income.
     const rothConversionThisYear = !stillWorking
       ? Math.min(profile.tsp.rothConversionAnnual || 0, tspTradBalance + tspTradDistribution)
       : 0;
     const ordinaryIncome = pension + fersSupplement + tspTradDistribution + rothConversionThisYear +
-      lumpSumLeavePayout + vsipPayout +
+      otherIncome + lumpSumLeavePayout + vsipPayout +
       spousePension + spouseTspDistribution +
       (spouse && spouseCurrentAge + (age - currentAge) < spouseLeaveServiceAge ? spouseCurrentIncome : 0) +
       (spouse?.retirementIncome || 0);
     const totalSSIncome = socialSecurity + spouseSocialSecurity;
+    // Inflation-index the 2024 brackets/standard deduction to this projection year.
+    const taxInflationFactor = Math.pow(1 + profile.assumptions.inflationRate / 100, Math.max(0, year - TAX_BRACKET_BASE_YEAR));
     const taxResult = calculateRetirementTax({
       ordinaryIncome: Math.max(0, ordinaryIncome),
       socialSecurityIncome: Math.max(0, totalSSIncome),
@@ -678,6 +695,7 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       primaryAge: age,
       spouseAge: spouseAgeThisYear,
       stateTaxRate: profile.assumptions.stateTaxRate,
+      inflationFactor: taxInflationFactor,
     });
     const netIncome = totalIncome - totalExpenses - taxResult.totalTax;
 

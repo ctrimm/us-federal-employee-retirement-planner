@@ -1,9 +1,9 @@
 /**
  * Federal (and optional state) income tax calculator for retirement projections.
  *
- * Uses 2024 tax brackets and standard deductions. Bracket thresholds are not
- * inflation-adjusted in the projection — this is a known simplification that
- * causes a slight over-estimate of taxes in later years.
+ * Uses 2024 tax brackets and standard deductions as the base year. Bracket thresholds
+ * and the standard deduction are scaled by an optional `inflationFactor` so the projection
+ * approximates the IRS's annual inflation indexing in later years.
  *
  * Key rules applied:
  *  1. Federal progressive tax brackets (single or MFJ)
@@ -16,6 +16,10 @@
  */
 
 export type FilingStatus = 'single' | 'married';
+
+// Base year for the hard-coded brackets/standard deductions below. Used to inflation-index
+// thresholds forward in multi-year projections.
+export const TAX_BRACKET_BASE_YEAR = 2024;
 
 interface TaxBracket {
   rate: number;    // decimal (e.g. 0.22)
@@ -53,8 +57,9 @@ const ADDITIONAL_DEDUCTION_65_MARRIED = 1_550;
 
 /**
  * Calculate federal income tax on a given taxable income using progressive brackets.
+ * Bracket thresholds are scaled by `inflationFactor` to approximate annual inflation indexing.
  */
-function applyBrackets(taxableIncome: number, brackets: TaxBracket[]): number {
+function applyBrackets(taxableIncome: number, brackets: TaxBracket[], inflationFactor: number = 1): number {
   if (taxableIncome <= 0) return 0;
 
   let tax = 0;
@@ -62,7 +67,8 @@ function applyBrackets(taxableIncome: number, brackets: TaxBracket[]): number {
 
   for (let i = 0; i < brackets.length; i++) {
     const bracket = brackets[i];
-    const bracketTop = bracket.upTo === Infinity ? taxableIncome : Math.min(taxableIncome, bracket.upTo);
+    const upTo = bracket.upTo === Infinity ? Infinity : bracket.upTo * inflationFactor;
+    const bracketTop = upTo === Infinity ? taxableIncome : Math.min(taxableIncome, upTo);
     if (bracketTop <= prev) break;
     tax += (bracketTop - prev) * bracket.rate;
     prev = bracketTop;
@@ -125,6 +131,12 @@ export interface TaxInputs {
   spouseAge?: number;
   /** Optional flat state income tax rate (e.g. 5 for 5%). Applies to total income. */
   stateTaxRate?: number;
+  /**
+   * Inflation factor (≥1) applied to bracket thresholds and the standard deduction to
+   * approximate the IRS's annual inflation indexing. Defaults to 1 (no indexing). The SS
+   * provisional-income thresholds are NOT indexed (they are fixed in statute).
+   */
+  inflationFactor?: number;
 }
 
 export interface TaxResult {
@@ -146,6 +158,7 @@ export function calculateRetirementTax(inputs: TaxInputs): TaxResult {
     primaryAge,
     spouseAge,
     stateTaxRate,
+    inflationFactor = 1,
   } = inputs;
 
   const grossIncome = ordinaryIncome + socialSecurityIncome;
@@ -153,12 +166,13 @@ export function calculateRetirementTax(inputs: TaxInputs): TaxResult {
     return { federalTax: 0, stateTax: 0, totalTax: 0, effectiveRate: 0, taxableSSBenefit: 0 };
   }
 
-  // Standard deduction (base + extra for each person 65+)
+  // Standard deduction (base + extra for each person 65+), inflation-indexed.
   const baseDeduction = filingStatus === 'married' ? STANDARD_DEDUCTION_MFJ : STANDARD_DEDUCTION_SINGLE;
   const additional65 = filingStatus === 'married' ? ADDITIONAL_DEDUCTION_65_MARRIED : ADDITIONAL_DEDUCTION_65_SINGLE;
   let standardDeduction = baseDeduction;
   if (primaryAge >= 65) standardDeduction += additional65;
   if (filingStatus === 'married' && spouseAge && spouseAge >= 65) standardDeduction += additional65;
+  standardDeduction *= inflationFactor;
 
   // SS taxation (IRS Provisional Income worksheet — phases in, capped at 85%)
   const taxableSSBenefit = ssTaxableAmount(ordinaryIncome, socialSecurityIncome, filingStatus);
@@ -168,7 +182,7 @@ export function calculateRetirementTax(inputs: TaxInputs): TaxResult {
   const taxableIncome = Math.max(0, agi - standardDeduction);
 
   const brackets = filingStatus === 'married' ? BRACKETS_MFJ : BRACKETS_SINGLE;
-  const federalTax = applyBrackets(taxableIncome, brackets);
+  const federalTax = applyBrackets(taxableIncome, brackets, inflationFactor);
 
   // State tax: flat rate applied to ordinary income + taxable SS portion (federal AGI).
   // This excludes the non-taxable portion of Social Security and all Roth distributions

@@ -122,17 +122,24 @@ Guaranteed income includes pension, FERS supplement, and Social Security. Non-li
 | LeanFIRE multiplier | 75% | Minimum spending tier |
 | ChubbyFIRE multiplier | 125% | Comfortable spending tier |
 | FatFIRE multiplier | 150% | Luxury spending tier |
-| Federal tax | 2024 brackets | Progressive (single/MFJ), standard deduction + age-65 addition |
+| Federal tax | 2024 brackets, indexed | Progressive (single/MFJ); brackets + standard deduction inflation-indexed forward |
 | State tax | 0% | Optional flat rate on pension/TSP income (excludes SS & Roth) |
 | Social Security | 30% of High-3 | Conservative WEP-adjusted estimate (FERS only) |
 | Medicare Part B | $174.70/mo (2024) | Starts at age 65 once not working; grows with healthcare inflation |
+| TSP RMDs | Age 73 / 75 | Forced taxable Traditional distributions (IRS Uniform Lifetime Table) |
 | Life expectancy | 85 | Adjustable in profile |
 
-**Known simplifications:**
-- Federal tax uses **2024 progressive brackets** (single/MFJ), the standard deduction with the age-65 addition ($1,950 single / $1,550 each married), and the IRS provisional-income test for Social Security taxation. Brackets are **not** indexed to future years, slightly overstating tax in later years. **IRMAA** (high-income Medicare surcharges) is not modeled.
-- State tax is an optional flat rate applied to ordinary income + taxable SS (excludes the non-taxable SS portion and all Roth distributions). It does not model state-specific pension exemptions.
+**What's modeled (income & taxes):**
+- **All taxable income is taxed:** pension, FERS supplement, Traditional TSP distributions, Roth conversions, lump-sum leave, VSIP, part-time/Barista wages, side-hustle/self-employment, and spouse income. Roth TSP distributions and the non-taxable portion of Social Security are correctly excluded.
+- Federal tax uses **2024 progressive brackets** (single/MFJ) with the standard deduction + age-65 addition ($1,950 single / $1,550 each married). Brackets and the standard deduction are **inflation-indexed** to each projection year (the SS provisional-income thresholds are not — they are fixed in statute).
 - Social Security taxation phases in per the IRS worksheet (lesser-of computation), capped at 85% of benefits.
+- **Required Minimum Distributions** from the Traditional TSP begin at age 73 (born ≤1959) or 75 (born 1960+) using the IRS Uniform Lifetime Table, forcing taxable income even at low drawdown rates. Roth TSP has no RMD.
+- State tax is an optional flat rate on ordinary income + taxable SS (excludes the non-taxable SS portion and all Roth distributions); it does not model state-specific pension exemptions.
+
+**Known simplifications:**
+- **IRMAA** (high-income Medicare Part B/D surcharges) is not modeled.
 - Social Security benefit estimate is an approximation — actual benefit requires an SSA earnings record. CSRS service earns no SS.
+- "Other investments" and non-rolled-over non-federal 401k balances grow and count toward net worth/FIRE but are not drawn down as spendable income in the year-by-year projection (only the TSP is); their growth is also untaxed.
 - FEHB premiums are community-rated (no age surcharge); FEHB↔Medicare coordination isn't modeled as a premium reduction.
 - CSRS survivor annuity uses the same 10% reduction / 50% survivor benefit as the FERS standard election (CSRS actually allows up to 55%).
 
