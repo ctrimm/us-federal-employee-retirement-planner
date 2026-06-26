@@ -194,6 +194,26 @@ export function UnifiedControlPanel({
     profile.retirement.partTimeEndAge || Math.min(currentAge + 10, lifeExpectancy)
   );
 
+  // Advanced federal strategies
+  const [militaryServiceYears, setMilitaryServiceYears] = useState(
+    profile.employment.militaryServiceYears || 0
+  );
+  const [militaryDepositPaid, setMilitaryDepositPaid] = useState(
+    profile.employment.militaryDepositPaid || false
+  );
+  const [postponeRetirement, setPostponeRetirement] = useState(
+    profile.retirement.postponeRetirement || false
+  );
+  const [annualLeaveHours, setAnnualLeaveHours] = useState(
+    profile.retirement.annualLeaveHoursAtRetirement || 0
+  );
+  const [earlyOutVERA, setEarlyOutVERA] = useState(
+    profile.retirement.earlyOutVERA || false
+  );
+  const [vsipAmount, setVsipAmount] = useState(
+    profile.retirement.vsipAmount || 0
+  );
+
   // Family Tab
   const [children, setChildren] = useState<Child[]>(
     profile.planning?.children || []
@@ -382,6 +402,8 @@ export function UnifiedControlPanel({
         nonFederalPeriods,
         sickLeaveHours,
         currentOrLastSalary: federalSalary,
+        militaryServiceYears,
+        militaryDepositPaid,
       },
       retirement: {
         ...profile.retirement,
@@ -392,6 +414,10 @@ export function UnifiedControlPanel({
         partTimeStartAge,
         partTimeEndAge,
         sideHustleIncome,
+        postponeRetirement,
+        annualLeaveHoursAtRetirement: annualLeaveHours,
+        earlyOutVERA,
+        vsipAmount,
       },
       tsp: {
         ...profile.tsp,
@@ -784,6 +810,109 @@ export function UnifiedControlPanel({
                   ~2,087 hours = 1 year service credit
                 </p>
               </div>
+
+              {/* Advanced Federal Strategies — collapsible */}
+              <details className="pt-4 border-t group">
+                <summary className="font-medium cursor-pointer select-none flex items-center justify-between">
+                  <span>⚙️ Advanced Federal Strategies</span>
+                  <span className="text-xs text-muted-foreground group-open:hidden">Show</span>
+                </summary>
+                <div className="space-y-4 mt-3">
+                  {/* Military service buyback */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Military Service Years: {militaryServiceYears}
+                    </label>
+                    <input
+                      type="number"
+                      value={militaryServiceYears}
+                      onChange={(e) => setMilitaryServiceYears(parseFloat(e.target.value) || 0)}
+                      min={0}
+                      max={40}
+                      step={0.5}
+                      className="w-full px-3 py-2 border rounded-md"
+                    />
+                    <label className="flex items-center gap-2 mt-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={militaryDepositPaid}
+                        onChange={(e) => setMilitaryDepositPaid(e.target.checked)}
+                      />
+                      Military deposit paid (counts toward FERS service)
+                    </label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Active-duty time only counts toward your annuity if you pay the deposit (~3% of military base pay).
+                    </p>
+                  </div>
+
+                  {/* Postponed MRA+10 */}
+                  <div>
+                    <label className="flex items-center gap-2 text-sm font-medium">
+                      <input
+                        type="checkbox"
+                        checked={postponeRetirement}
+                        onChange={(e) => setPostponeRetirement(e.target.checked)}
+                      />
+                      Postpone annuity (MRA+10)
+                    </label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Leave service at {leaveServiceAge} but start the annuity at {claimPensionAge} to shrink the 5%/yr
+                      reduction. FEHB is suspended during the gap and reinstated when the annuity begins. Set the
+                      "claim pension" age later than the "leave service" age above.
+                    </p>
+                  </div>
+
+                  {/* Lump-sum annual leave */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Unused Annual Leave Hours: {annualLeaveHours}
+                    </label>
+                    <input
+                      type="number"
+                      value={annualLeaveHours}
+                      onChange={(e) => setAnnualLeaveHours(parseInt(e.target.value) || 0)}
+                      min={0}
+                      max={440}
+                      step={8}
+                      className="w-full px-3 py-2 border rounded-md"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Paid as a lump sum at your final hourly rate in the year you separate (taxable). Most feds carry up to 240 hours.
+                    </p>
+                  </div>
+
+                  {/* VERA / VSIP */}
+                  <div>
+                    <label className="flex items-center gap-2 text-sm font-medium">
+                      <input
+                        type="checkbox"
+                        checked={earlyOutVERA}
+                        onChange={(e) => setEarlyOutVERA(e.target.checked)}
+                      />
+                      VERA early-out (immediate unreduced annuity)
+                    </label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Voluntary Early Retirement: age 50 with 20+ years, or any age with 25+ years. No age reduction; the
+                      FERS supplement begins at your MRA.
+                    </p>
+                    <label className="block text-sm font-medium mb-2 mt-3">
+                      VSIP Separation Incentive: {formatCurrency(vsipAmount, 0)}
+                    </label>
+                    <input
+                      type="number"
+                      value={vsipAmount}
+                      onChange={(e) => setVsipAmount(parseInt(e.target.value) || 0)}
+                      min={0}
+                      max={25000}
+                      step={500}
+                      className="w-full px-3 py-2 border rounded-md"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      One-time taxable buyout (capped at $25,000) paid in the year you separate.
+                    </p>
+                  </div>
+                </div>
+              </details>
 
               <div className="pt-4 border-t">
                 <h4 className="font-medium mb-2">Service History</h4>

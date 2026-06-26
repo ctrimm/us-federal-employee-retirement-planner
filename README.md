@@ -140,11 +140,11 @@ Guaranteed income includes pension, FERS supplement, and Social Security. Non-li
 
 ## Federal Retirement Tips & Strategies
 
-Lesser-known moves that experienced feds use to maximize their benefits. Items marked ✅ are reflected in FEREX's math; ⚠️ are surfaced as guidance but not fully modeled; 💡 are planning callouts to consider.
+Lesser-known moves that experienced feds use to maximize their benefits. Items marked ✅ are reflected in FEREX's math; ⚠️ are surfaced as guidance but not fully modeled; 💡 are planning callouts to consider. Most of these are configurable under **⚙️ Advanced Federal Strategies** in the control panel.
 
 ### Timing your retirement date
-- **💡 Retire at the end of a pay period / leave year.** Annual leave is paid out as a lump sum at your final salary rate (up to the 240-hour carryover cap, often more for SES/overseas). Retiring in early January cashes out a full year's accrued leave at once. ([FedWeek – Lump-Sum Annual Leave](https://www.fedweek.com/retirement-financial-planning/whats-in-a-lump-sum-payment-of-unused-annual-leave/))
-- **⚠️ Mind the annuity-start gap.** Under FERS your annuity doesn't begin until the **first day of the month after** you separate. Retiring January 3 means no annuity until February 1 — weigh the leave payout against the lost annuity month. ([EP Wealth](https://www.epwealth.com/blog/fers-annual-leave-lump-sum-bridge-retirement-income-gaps))
+- **✅ Retire at the end of a pay period / leave year.** Annual leave is paid out as a lump sum at your final salary rate (up to the 240-hour carryover cap, often more for SES/overseas). Enter your unused **annual leave hours** and FEREX adds the taxable lump sum in your separation year. ([FedWeek – Lump-Sum Annual Leave](https://www.fedweek.com/retirement-financial-planning/whats-in-a-lump-sum-payment-of-unused-annual-leave/))
+- **⚠️ Mind the annuity-start gap.** Under FERS your annuity doesn't begin until the **first day of the month after** you separate. Retiring January 3 means no annuity until February 1 — weigh the leave payout against the lost annuity month (the sub-year month gap itself isn't modeled). ([EP Wealth](https://www.epwealth.com/blog/fers-annual-leave-lump-sum-bridge-retirement-income-gaps))
 - **💡 Lump-sum leave is taxable income** in the year received. A January/February retirement can shift that payout into a lower-income tax year than a December retirement. ([Fed Pilot](https://fedpilot.com/blog/2026/04/16/annual-leave-payout-at-retirement-what-federal-employees-need-to-know/))
 
 ### Sick leave vs. annual leave
@@ -152,7 +152,7 @@ Lesser-known moves that experienced feds use to maximize their benefits. Items m
 - **💡 Burn sick leave, bank annual leave** in your final year: annual leave becomes cash, while sick leave only nudges the annuity up slightly — it can take decades for the pension bump to equal the leave's cash value. Note sick leave counts toward your **annuity** but **not** toward retirement **eligibility**. ([Haws Federal Advisors](https://hawsfederaladvisors.com/how-does-my-unused-federal-sick-leave-and-annual-leave-affect-my-retirement/))
 
 ### MRA+10: postpone instead of taking it reduced
-- **⚠️ Postponed vs. immediate MRA+10.** Taking an MRA+10 annuity immediately costs **5% per year under 62** (modeled ✅). Instead you can **postpone** the start date to reduce or eliminate that penalty — and, crucially, **reinstate FEHB** when the annuity begins (as long as you met the 5-year rule). The lifetime value of postponing is often $150k–$250k. FEREX models the leave-service vs. claim-pension ages separately, so you can compare. ([Fed Pilot – MRA+10](https://fedpilot.com/blog/2026/05/13/mra-plus-10-fers-retirement-reduction-postpone/), [Gilbert Employment Law](https://www.gelawyer.com/blog/2025/05/fers-postponed-retirement/))
+- **✅ Postponed vs. immediate MRA+10.** Taking an MRA+10 annuity immediately costs **5% per year under 62**. Toggle **Postpone annuity** and set your claim-pension age later than your leave-service age: FEREX reduces/eliminates the penalty based on the claim age and **suspends FEHB during the gap**, reinstating it when the annuity begins. The lifetime value of postponing is often $150k–$250k. ([Fed Pilot – MRA+10](https://fedpilot.com/blog/2026/05/13/mra-plus-10-fers-retirement-reduction-postpone/), [Gilbert Employment Law](https://www.gelawyer.com/blog/2025/05/fers-postponed-retirement/))
 - **💡 Postponed ≠ deferred.** *Postponed* (MRA + 10+ yrs) lets you reinstate FEHB/FEGLI; *deferred* (left before MRA) permanently forfeits FEHB. ([myFEBA](https://www.myfeba.org/blog/postponed-vs-deferred-federal-retirement-understanding-the-key-differences/))
 
 ### Health insurance & Medicare
@@ -164,11 +164,11 @@ Lesser-known moves that experienced feds use to maximize their benefits. Items m
 ### TSP & taxes
 - **✅ Rule of 55 / age-55 separation.** Separating in or after the year you turn 55 allows penalty-free TSP withdrawals (age 50 for special categories) — modeled. ([federalretirement.net – TSP](https://federalretirement.net/thrift-savings-plan-tsp/))
 - **✅ Roth conversion ladder in low-income years.** The gap between retirement and when pension/SS/RMDs ramp up is prime time to convert Traditional→Roth at low brackets. FEREX models optional annual Roth conversions and taxes them in-year. ([federalretirement.net – TSP](https://federalretirement.net/thrift-savings-plan-tsp/))
-- **💡 FERS Supplement earnings test.** If you work after retiring, wages above the annual SS limit reduce the supplement $1 for every $2 — a reason to time part-time/Barista-FIRE income. ([OPM CSRS/FERS Handbook Ch. 51](https://www.opm.gov/retirement-center/publications-forms/csrsfers-handbook/c051.pdf))
+- **✅ FERS Supplement earnings test.** If you have part-time/side-hustle wages above the annual SS limit ($22,320 in 2024), FEREX reduces the supplement $1 for every $2 over the limit — a reason to time Barista-FIRE income. ([OPM CSRS/FERS Handbook Ch. 51](https://www.opm.gov/retirement-center/publications-forms/csrsfers-handbook/c051.pdf))
 
 ### Service credit & early-out programs
-- **💡 Military service deposit.** Paying a deposit (~3% of military base pay + interest) can add active-duty years to your FERS service — often a high-return buyback. ([NIH – Retirement FAQs](https://hr.nih.gov/benefits/retirement/retirement-faqs))
-- **💡 VERA / VSIP early-outs.** Voluntary Early Retirement (age 50 + 20 yrs, or any age + 25 yrs) and separation incentives can open an earlier exit during reorganizations. ([federalretirement.net – Early Outs](https://federalretirement.net/early_retirements.htm))
+- **✅ Military service deposit.** Enter your active-duty years and check **deposit paid** — those years are added to your FERS service for both the annuity and eligibility (the deposit itself, ~3% of military base pay + interest, is a high-return buyback). ([NIH – Retirement FAQs](https://hr.nih.gov/benefits/retirement/retirement-faqs))
+- **✅ VERA / VSIP early-outs.** Toggle **VERA** (age 50 + 20 yrs, or any age + 25 yrs) for an immediate unreduced annuity with the supplement starting at MRA, and enter a **VSIP** buyout as a one-time taxable payment in your separation year. ([federalretirement.net – Early Outs](https://federalretirement.net/early_retirements.htm))
 
 > These are educational planning ideas, not individualized advice. Confirm specifics with OPM and your agency benefits officer before acting.
 

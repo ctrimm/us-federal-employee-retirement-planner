@@ -13,11 +13,11 @@ const FEHB_BASE_COSTS = {
 };
 
 /**
- * Calculate annual FEHB cost based on coverage level and age
+ * Calculate annual FEHB cost (employee/annuitant share) for a coverage level,
+ * inflated `yearsFromNow` years at the healthcare inflation rate.
  */
 export function calculateAnnualFEHBCost(
   coverageLevel: FEHBCoverageLevel,
-  age: number,
   yearsFromNow: number,
   healthcareInflationRate: number
 ): number {

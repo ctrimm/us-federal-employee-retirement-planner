@@ -16,7 +16,7 @@ import {
   SURVIVOR_ANNUITY_REDUCTION,
   MRA_10_ANNUAL_REDUCTION,
 } from '../types';
-import { calculateServiceBySystem, detectRetirementSystem, calculateMRA } from './systemDetection';
+import { calculateServiceBySystem, calculateMRA, creditableServicePeriods } from './systemDetection';
 
 /**
  * Calculate High-3 average salary
@@ -139,8 +139,10 @@ export function calculateMixedPension(
  */
 export function calculateAnnualPension(profile: UserProfile): PensionBreakdown {
   const high3 = calculateHigh3(profile);
+  // Include bought-back military service (if the deposit is paid) in creditable service.
+  const creditablePeriods = creditableServicePeriods(profile.employment);
   const { fersYears, csrsYears, totalYears } = calculateServiceBySystem(
-    profile.employment.servicePeriods,
+    creditablePeriods,
     profile.employment.sickLeaveHours || 0
   );
 
@@ -155,7 +157,7 @@ export function calculateAnnualPension(profile: UserProfile): PensionBreakdown {
     // Mixed service
     annualPension = calculateMixedPension(
       high3,
-      profile.employment.servicePeriods,
+      creditablePeriods,
       profile.retirement.survivorAnnuityType,
       retirementAge
     );
@@ -183,9 +185,12 @@ export function calculateAnnualPension(profile: UserProfile): PensionBreakdown {
   // ── MRA+10 early retirement reduction (FERS only) ─────────────────────────
   // Applies when a FERS employee retires at MRA with 10–29 creditable years
   // and claims the annuity before age 62.  Reduction = 5% per year under 62.
-  // NOT applied for immediate full annuity (30+ yrs at MRA, or 20+ yrs at 60).
+  // NOT applied for immediate full annuity (30+ yrs at MRA, or 20+ yrs at 60),
+  // and NOT applied under a VERA early-out (the basic annuity has no age reduction).
+  const veraEligible = profile.retirement.earlyOutVERA === true &&
+    ((retirementAge !== undefined && retirementAge >= 50 && totalYears >= 20) || totalYears >= 25);
   let mra10ReductionPercent = 0;
-  if (fersYears > 0 && retirementAge !== undefined) {
+  if (fersYears > 0 && retirementAge !== undefined && !veraEligible) {
     const leaveAge = profile.retirement.leaveServiceAge ?? retirementAge;
     const mra = calculateMRA(profile.personal.birthYear);
     const isImmediateFullAnnuity = fersYears >= 30 || (fersYears >= 20 && leaveAge >= 60);

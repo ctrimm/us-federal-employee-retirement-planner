@@ -83,6 +83,7 @@ export interface TSPAllocation {
 
 export interface PersonalInfo {
   birthYear: number;
+  gender?: Gender;
   lifeExpectancy?: number; // Default 85 if not specified
   spouseInfo?: SpouseInfo;
 }
@@ -96,6 +97,9 @@ export interface EmploymentInfo {
   sickLeaveHours?: number; // Unused sick leave hours (converts to service time)
   socialSecurityEstimate?: number; // Annual SS estimate from SSA.gov (used for FERS Supplement and SS projection)
   wepMonthlyReduction?: number; // WEP reduction in $/month from SSA notice (only used when no ssEstimate provided)
+  // Military service buyback: active-duty years count toward FERS service only if a deposit is paid
+  militaryServiceYears?: number; // Years of active-duty military service
+  militaryDepositPaid?: boolean; // Whether the military deposit has been (or will be) paid
 }
 
 export interface RetirementInfo {
@@ -103,6 +107,14 @@ export interface RetirementInfo {
   leaveServiceAge?: number; // Age when leaving federal service
   intendedRetirementAge?: number; // Age when claiming pension (can be after leaving service)
   projectionEndAge?: number;
+  // Postponed MRA+10 retirement: defer the annuity start (claim age > leave age) to shrink the
+  // 5%/yr reduction; FEHB/FEGLI are suspended during the gap and reinstated when the annuity begins.
+  postponeRetirement?: boolean;
+  // Lump-sum annual leave: unused hours paid out at separation, at the final hourly salary rate.
+  annualLeaveHoursAtRetirement?: number;
+  // VERA / VSIP early-out
+  earlyOutVERA?: boolean; // Voluntary Early Retirement Authority — immediate unreduced annuity
+  vsipAmount?: number; // Voluntary Separation Incentive Payment — one-time taxable payment at separation
   // Barista FIRE settings
   enableBaristaFire?: boolean;
   partTimeIncomeAnnual?: number; // Annual part-time income
@@ -276,6 +288,11 @@ export interface ProjectionYear {
   socialSecurity: number; // If applicable
   fersSupplement: number; // FERS Supplement (paid from retirement to age 62 for eligible FERS retirees)
   otherIncome: number; // Part-time work, side hustle, etc.
+  // One-time separation inflows (paid in the year federal service ends)
+  lumpSumLeavePayout?: number; // Unused annual leave paid out at retirement
+  vsipPayout?: number; // VSIP separation incentive
+  // FERS Supplement earnings-test reduction applied this year (informational)
+  supplementEarningsTestReduction?: number;
   spouseIncome: number; // Total spouse income (working income OR sum of pension+TSP+SS in retirement)
   // Spouse income breakdown (auto-calculated when full spouse profile is provided)
   spousePension?: number; // Spouse's federal pension (if applicable)
@@ -380,6 +397,11 @@ export const MEDICARE_PART_B_MONTHLY_2024 = 174.70; // Standard Part B premium; 
 // Age-62 Social Security benefit is roughly 70% of the full-retirement-age (67) benefit.
 // Used to convert an entered FRA estimate into an age-62 figure for the FERS supplement.
 export const SS_AGE62_TO_FRA_RATIO = 0.70;
+// 2024 Social Security annual earnings-test limit for those under full retirement age.
+// The FERS Supplement is reduced $1 for every $2 of wages above this limit.
+export const SS_ANNUAL_EARNINGS_LIMIT = 22_320;
+// Standard federal work hours in a year (used for sick/annual leave hour→year conversions).
+export const STANDARD_WORK_HOURS_PER_YEAR = 2087;
 export const LEAN_FIRE_MULTIPLIER = 0.75;   // LeanFIRE: 75% of base living expenses
 export const CHUBBY_FIRE_MULTIPLIER = 1.25; // ChubbyFIRE: 125% of base living expenses
 export const FAT_FIRE_MULTIPLIER = 1.50;    // FatFIRE: 150% of base living expenses

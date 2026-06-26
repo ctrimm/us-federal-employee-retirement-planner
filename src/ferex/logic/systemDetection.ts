@@ -3,9 +3,31 @@
  * Determines FERS vs CSRS based on service history
  */
 
-import type { ServicePeriod, RetirementSystem } from '../types';
+import type { ServicePeriod, RetirementSystem, EmploymentInfo } from '../types';
+import { STANDARD_WORK_HOURS_PER_YEAR } from '../types';
 
 const FERS_START_DATE = new Date('1984-01-01');
+
+/**
+ * Return the creditable service periods including a synthetic period for bought-back
+ * military service. Active-duty military time counts toward FERS service (annuity and
+ * eligibility) only if the employee pays the military deposit. Modeled as FERS service.
+ */
+export function creditableServicePeriods(employment: EmploymentInfo): ServicePeriod[] {
+  const years = employment.militaryDepositPaid ? (employment.militaryServiceYears || 0) : 0;
+  if (years <= 0) return employment.servicePeriods;
+
+  const start = new Date(2000, 0, 1);
+  const end = new Date(start.getTime() + years * 365.25 * 24 * 60 * 60 * 1000);
+  const military: ServicePeriod = {
+    id: 'military-buyback',
+    startDate: start,
+    endDate: end,
+    system: 'FERS',
+    isActive: false,
+  };
+  return [...employment.servicePeriods, military];
+}
 
 /**
  * Automatically detect retirement system based on start date
@@ -40,8 +62,7 @@ export function calculateTotalService(periods: ServicePeriod[]): number {
  * ~2,087 hours of sick leave = 1 year of service credit (40hrs/week * 52.14 weeks)
  */
 export function calculateSickLeaveCredit(sickLeaveHours: number): number {
-  const HOURS_PER_YEAR = 2087; // Standard work hours per year
-  return sickLeaveHours / HOURS_PER_YEAR;
+  return sickLeaveHours / STANDARD_WORK_HOURS_PER_YEAR;
 }
 
 /**
