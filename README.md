@@ -34,6 +34,7 @@ FEREX identifies four key financial independence milestones by calculating portf
   - Years 6–10: 1.75% per year
   - Years 11+: 2.0% per year
 - **FERS enhanced accrual:** 1.1% per year (instead of 1%) when retiring at **age 62+ with 20+ years**
+- **FERS special provisions (high-risk careers):** **1.7%** per year for the first 20 years of covered service + 1.0% after, for law enforcement, firefighters, air traffic controllers, CBPOs, etc.
 - **High-3:** Average salary of the 3 highest consecutive years
 - Survivor annuity reduction (10% for standard election; survivor receives 50% of the unreduced annuity)
 - **COLA** applied by system: CSRS receives the full CPI COLA; FERS receives the reduced "diet" COLA **and no COLA until age 62** (special-provision retirees excepted)
@@ -60,7 +61,18 @@ FERS employees who retire on an immediate full annuity (**MRA with 30+ years, or
 FERS Supplement ≈ Estimated SS Benefit at age 62 × (FERS Years / 40)
 ```
 
-OPM uses the **age-62** benefit estimate; since an SSA estimate is usually quoted at full retirement age (67), the engine scales it to ~70% to approximate the age-62 figure. The supplement is also subject to the Social Security **earnings test** (reduced if you have wages above the annual limit) — not modeled here.
+OPM uses the **age-62** benefit estimate; since an SSA estimate is usually quoted at full retirement age (67), the engine scales it to ~70% to approximate the age-62 figure. The supplement is reduced by the Social Security **earnings test** ($1 per $2 of wages over the annual limit) — except for special-provision retirees, who are exempt until their MRA.
+
+### FERS Special Provisions (high-risk / high-stress careers)
+Law enforcement officers, firefighters, air traffic controllers, CBPOs, nuclear-materials couriers, and similar enhanced-position employees retire under richer FERS rules. Set the **Special Provision Category** in the control panel (or flag individual service periods):
+
+- **Accrual:** `1.7% × High-3 × first 20 covered years + 1.0% × years beyond 20` (e.g. 25 years = 39% of High-3 vs 25% under regular FERS)
+- **Eligibility:** age **50 with 20** covered years, **or any age with 25** covered years — no MRA+10 reduction
+- **COLA:** paid **immediately** (regular FERS gets no COLA before 62)
+- **FERS Supplement:** payable at the special retirement and **earnings-test exempt until MRA**
+- **Mandatory retirement:** age **56** for ATCs, age **57** for LEO/firefighters (surfaced as guidance)
+
+Sources: [OPM CSRS/FERS Handbook Ch. 54](https://www.opm.gov/retirement-center/publications-forms/csrsfers-handbook/c054.pdf) · [OPM – Computation](https://www.opm.gov/retirement-center/fers-information/computation/) · [OPM – Types of Retirement](https://www.opm.gov/retirement-center/fers-information/types-of-retirement/)
 
 ### TSP (Thrift Savings Plan)
 - Employee contributions (dollar amount or % of salary), Traditional and Roth tracked separately
@@ -106,6 +118,29 @@ CoastFIRE Target = FIRE Target at Retirement / (1 + Return Rate) ^ Years Until R
 ```
 
 Guaranteed income includes pension, FERS supplement, and Social Security. Non-living expenses (healthcare, college costs) are not reduced for FIRE tiers. The expense base used for FIRE targets **includes projected income taxes** and **excludes finite, non-perpetual costs** (debt payments and one-time life events) so they aren't annualized into a 25× target. Household liquid assets (your TSP, spouse TSP, other investments, and any non-rolled-over 401k) all count toward reaching FI. All FIRE targets are pension-adjusted—the larger your guaranteed income, the smaller the portfolio required.
+
+---
+
+## Feature Status
+
+**✅ Working today**
+
+- **Pension:** FERS (1% / 1.1% enhanced), CSRS (tiered), mixed service, **FERS special provisions (1.7%/1.0%)**, High-3, sick-leave credit, military deposit buyback
+- **Eligibility:** MRA tables, immediate / MRA+10 / **postponed** / VERA / **special-provision** retirements, FEHB 5-year + immediate-annuity carry-in
+- **Reductions & survivor:** MRA+10 (5%/yr), FERS 10%/50% and **CSRS 2.5%-10% / 55%** survivor
+- **COLA:** CSRS full CPI, FERS diet COLA (none before 62), **immediate COLA for special provisions**
+- **FERS Supplement:** eligibility, age-62 scaling, earnings test (with special-provision exemption to MRA)
+- **Income:** pension, Social Security (provisional-income taxation, WEP), TSP (Traditional/Roth, Rule of 55, Roth conversions), **whole-portfolio drawdown** of non-federal 401k + IRA/401k/brokerage/Roth taxed by type, **RMDs (73/75)**, part-time/Barista & side-hustle, spouse modeling, lump-sum annual leave, VSIP
+- **Taxes:** progressive 2024 brackets **inflation-indexed**, standard + age-65 deduction, **long-term capital gains (0/15/20%)**, dividend/interest drag, optional state tax, **Medicare Part B + IRMAA**
+- **Other:** guardrails withdrawals, FIRE tiers + CoastFIRE, debts/assets/college/life-events, **separation-month proration**, charts (income, expenses, **taxes**, TSP, net worth) with toggleable series
+
+**🔜 Planned / not yet modeled**
+
+- Bridge health coverage (COBRA/ACA) cost during a postponed-annuity FEHB gap; FEHB suspend → Medicare Advantage / TRICARE
+- IRMAA refinements (2-year MAGI lookback, Part D surcharge)
+- Tax-optimal **per-account withdrawal ordering** (currently a uniform rate across pools)
+- Per-account cost-basis input in the account editor (engine supports it; UI uses a default)
+- Special provisions for a **spouse**, and exact enforcement of mandatory retirement ages
 
 ---
 

@@ -136,11 +136,12 @@ This document tracks planned features and enhancements for future releases of FE
   - Government Pension Offset calculator
   - More accurate Social Security estimates
 
-- [ ] **Special Retirement Categories**
-  - Law Enforcement Officer (LEO) calculations
-  - Air Traffic Controller (ATC) rules
-  - Firefighter special provisions
-  - Custom accrual rates
+- [x] **Special Retirement Categories** (FERS special provisions)
+  - Law Enforcement Officer (LEO) / firefighter / CBPO / ATC: 1.7%/1.0% accrual
+  - Age-50/20 or any-age/25 eligibility, no MRA+10 reduction
+  - Immediate COLA, supplement earnings-test exemption until MRA
+  - Mandatory retirement ages surfaced (56 ATC / 57 others)
+  - _Remaining:_ spouse special provisions; hard enforcement of mandatory ages
 
 - [ ] **Deferred Retirement Calculator**
   - Estimate deferred retirement benefits

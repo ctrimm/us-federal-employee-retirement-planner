@@ -12,11 +12,13 @@ import type {
 import {
   FERS_ACCRUAL_RATE,
   FERS_ENHANCED_ACCRUAL_RATE,
+  FERS_SPECIAL_ACCRUAL_RATE,
+  FERS_SPECIAL_FIRST_YEARS,
   CSRS_ACCRUAL_RATES,
   SURVIVOR_ANNUITY_REDUCTION,
   MRA_10_ANNUAL_REDUCTION,
 } from '../types';
-import { calculateServiceBySystem, calculateMRA, creditableServicePeriods } from './systemDetection';
+import { calculateServiceBySystem, calculateMRA, creditableServicePeriods, resolveSpecialYears } from './systemDetection';
 
 /**
  * Calculate High-3 average salary
@@ -149,7 +151,7 @@ export function calculateAnnualPension(profile: UserProfile): PensionBreakdown {
   const high3 = calculateHigh3(profile);
   // Include bought-back military service (if the deposit is paid) in creditable service.
   const creditablePeriods = creditableServicePeriods(profile.employment);
-  const { fersYears, csrsYears, totalYears } = calculateServiceBySystem(
+  const { fersYears, csrsYears, specialYears, totalYears } = calculateServiceBySystem(
     creditablePeriods,
     profile.employment.sickLeaveHours || 0
   );
@@ -157,48 +159,38 @@ export function calculateAnnualPension(profile: UserProfile): PensionBreakdown {
   // Retirement age is used to determine whether the 1.1% enhanced FERS accrual applies
   const retirementAge = profile.retirement.intendedRetirementAge || profile.retirement.leaveServiceAge;
 
-  let annualPension: number;
-  let accrualRate: number;
+  // Resolve FERS years covered under special provisions (military buyback stays regular).
+  const militaryCredit = profile.employment.militaryDepositPaid ? (profile.employment.militaryServiceYears || 0) : 0;
+  const effSpecialYears = resolveSpecialYears(profile.employment, Math.max(0, fersYears - militaryCredit), specialYears);
+  const regularFersYears = Math.max(0, fersYears - effSpecialYears);
 
-  // Determine primary system and calculate
-  if (csrsYears > 0 && fersYears > 0) {
-    // Mixed service
-    annualPension = calculateMixedPension(
-      high3,
-      creditablePeriods,
-      profile.retirement.survivorAnnuityType,
-      retirementAge
+  // ── Compute gross annual pension (before survivor reduction) ──────────────
+  let annualPension = 0;
+  // Special-provision portion: 1.7% for the first 20 covered years, 1.0% thereafter.
+  if (effSpecialYears > 0) {
+    annualPension += high3 * (
+      FERS_SPECIAL_ACCRUAL_RATE * Math.min(effSpecialYears, FERS_SPECIAL_FIRST_YEARS) +
+      FERS_ACCRUAL_RATE * Math.max(0, effSpecialYears - FERS_SPECIAL_FIRST_YEARS)
     );
-    accrualRate = annualPension / (high3 * totalYears); // Effective rate
-  } else if (csrsYears > 0) {
-    // CSRS only
-    annualPension = calculateCSRSPension(
-      high3,
-      csrsYears,
-      profile.retirement.survivorAnnuityType
-    );
-    accrualRate = annualPension / (high3 * csrsYears);
-  } else {
-    // FERS only (most common)
-    annualPension = calculateFERSPension(
-      high3,
-      fersYears,
-      profile.retirement.survivorAnnuityType,
-      retirementAge
-    );
-    const useEnhanced = retirementAge !== undefined && retirementAge >= 62 && fersYears >= 20;
-    accrualRate = useEnhanced ? FERS_ENHANCED_ACCRUAL_RATE : FERS_ACCRUAL_RATE;
   }
+  // Regular FERS portion (1% or 1.1% enhanced), then CSRS portion.
+  if (regularFersYears > 0) {
+    annualPension += calculateFERSPension(high3, regularFersYears, 'none', retirementAge);
+  }
+  if (csrsYears > 0) {
+    annualPension += calculateCSRSPension(high3, csrsYears, 'none');
+  }
+  const accrualRate = totalYears > 0 ? annualPension / (high3 * totalYears) : FERS_ACCRUAL_RATE;
 
-  // ── MRA+10 early retirement reduction (FERS only) ─────────────────────────
-  // Applies when a FERS employee retires at MRA with 10–29 creditable years
-  // and claims the annuity before age 62.  Reduction = 5% per year under 62.
-  // NOT applied for immediate full annuity (30+ yrs at MRA, or 20+ yrs at 60),
-  // and NOT applied under a VERA early-out (the basic annuity has no age reduction).
+  // ── MRA+10 early retirement reduction (regular FERS only) ─────────────────
+  // Reduction = 5% per year under 62. NOT applied for an immediate full annuity (30+ yrs at
+  // MRA, or 20+ yrs at 60), a VERA early-out, or a special-provision retirement (50/20 or 25).
   const veraEligible = profile.retirement.earlyOutVERA === true &&
     ((retirementAge !== undefined && retirementAge >= 50 && totalYears >= 20) || totalYears >= 25);
+  const specialEligible = effSpecialYears > 0 &&
+    ((retirementAge !== undefined && retirementAge >= 50 && effSpecialYears >= 20) || effSpecialYears >= 25);
   let mra10ReductionPercent = 0;
-  if (fersYears > 0 && retirementAge !== undefined && !veraEligible) {
+  if (fersYears > 0 && retirementAge !== undefined && !veraEligible && !specialEligible) {
     const leaveAge = profile.retirement.leaveServiceAge ?? retirementAge;
     const mra = calculateMRA(profile.personal.birthYear);
     const isImmediateFullAnnuity = fersYears >= 30 || (fersYears >= 20 && leaveAge >= 60);
@@ -210,15 +202,17 @@ export function calculateAnnualPension(profile: UserProfile): PensionBreakdown {
     }
   }
 
-  // Calculate the effective survivor-reduction fraction (for display).
-  // CSRS uses the 2.5%/10% cost formula; FERS/mixed use the flat 10%.
+  // ── Survivor reduction applied to the (post-age-reduction) annuity ────────
+  // CSRS-only uses the 2.5%/10% cost formula; FERS/mixed/special use the flat 10%.
   let survivorReduction = 0;
   if (profile.retirement.survivorAnnuityType !== 'none') {
     if (csrsYears > 0 && fersYears === 0) {
-      const unreduced = calculateCSRSPension(high3, csrsYears, 'none');
-      survivorReduction = unreduced > 0 ? csrsSurvivorReductionAmount(unreduced) / unreduced : 0;
+      const redAmt = csrsSurvivorReductionAmount(annualPension);
+      survivorReduction = annualPension > 0 ? redAmt / annualPension : 0;
+      annualPension -= redAmt;
     } else {
       survivorReduction = SURVIVOR_ANNUITY_REDUCTION.standard;
+      annualPension *= (1 - survivorReduction);
     }
   }
 

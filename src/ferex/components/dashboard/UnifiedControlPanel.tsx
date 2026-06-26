@@ -16,6 +16,7 @@ import type {
   NonFederalEmploymentPeriod,
   OtherAccount,
   OtherAccountType,
+  SpecialProvisionType,
 } from '../../types';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -200,6 +201,9 @@ export function UnifiedControlPanel({
   );
   const [militaryDepositPaid, setMilitaryDepositPaid] = useState(
     profile.employment.militaryDepositPaid || false
+  );
+  const [specialProvisionType, setSpecialProvisionType] = useState<SpecialProvisionType>(
+    profile.employment.specialProvisionType || 'none'
   );
   const [postponeRetirement, setPostponeRetirement] = useState(
     profile.retirement.postponeRetirement || false
@@ -407,6 +411,7 @@ export function UnifiedControlPanel({
         currentOrLastSalary: federalSalary,
         militaryServiceYears,
         militaryDepositPaid,
+        specialProvisionType,
       },
       retirement: {
         ...profile.retirement,
@@ -822,6 +827,30 @@ export function UnifiedControlPanel({
                   <span className="text-xs text-muted-foreground group-open:hidden">Show</span>
                 </summary>
                 <div className="space-y-4 mt-3">
+                  {/* Special provisions (high-risk / high-stress careers) */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Special Provision Category
+                    </label>
+                    <select
+                      value={specialProvisionType}
+                      onChange={(e) => setSpecialProvisionType(e.target.value as SpecialProvisionType)}
+                      className="w-full px-3 py-2 border rounded-md"
+                    >
+                      <option value="none">None (regular FERS)</option>
+                      <option value="leo_firefighter">Law Enforcement / Firefighter / CBPO</option>
+                      <option value="atc">Air Traffic Controller</option>
+                      <option value="other">Other special category</option>
+                    </select>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Enhanced FERS retirement: <strong>1.7%</strong> of high-3 for the first 20 years
+                      (1.0% after), retire at age 50 with 20 years or any age with 25, immediate COLAs,
+                      and a supplement that's earnings-test exempt until your MRA.
+                      {specialProvisionType === 'atc' && ' Mandatory retirement at age 56.'}
+                      {(specialProvisionType === 'leo_firefighter' || specialProvisionType === 'other') && ' Mandatory retirement at age 57.'}
+                    </p>
+                  </div>
+
                   {/* Military service buyback */}
                   <div>
                     <label className="block text-sm font-medium mb-2">

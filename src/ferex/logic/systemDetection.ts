@@ -87,11 +87,13 @@ export function calculateServiceBySystem(
 ): {
   fersYears: number;
   csrsYears: number;
+  specialYears: number;
   totalYears: number;
   sickLeaveCredit: number;
 } {
   let fersYears = 0;
   let csrsYears = 0;
+  let specialYears = 0;
 
   for (const period of periods) {
     const start = new Date(period.startDate);
@@ -104,6 +106,7 @@ export function calculateServiceBySystem(
 
     if (system === 'FERS') {
       fersYears += years;
+      if (period.specialProvision) specialYears += years;
     } else if (system === 'CSRS') {
       csrsYears += years;
     }
@@ -125,9 +128,28 @@ export function calculateServiceBySystem(
   return {
     fersYears,
     csrsYears,
+    specialYears,
     totalYears: fersYears + csrsYears,
     sickLeaveCredit,
   };
+}
+
+/**
+ * Resolve the number of FERS years covered under special provisions.
+ * Explicit per-period `specialProvision` flags take precedence; otherwise a profile-level
+ * `specialProvisionType` treats all (non-military) FERS service as covered.
+ */
+export function resolveSpecialYears(
+  employment: EmploymentInfo,
+  fersYearsExcludingMilitary: number,
+  specialYearsFromPeriods: number
+): number {
+  const anyFlagged = (employment.servicePeriods || []).some((p) => p.specialProvision);
+  if (anyFlagged) return specialYearsFromPeriods;
+  if (employment.specialProvisionType && employment.specialProvisionType !== 'none') {
+    return fersYearsExcludingMilitary;
+  }
+  return 0;
 }
 
 /**

@@ -8,12 +8,18 @@ export type Gender = 'male' | 'female';
 export type SurvivorAnnuityType = 'none' | 'standard' | 'courtOrdered';
 export type FEHBCoverageLevel = 'self' | 'self+one' | 'self+family';
 
+// FERS special provisions (enhanced retirement) for high-risk / high-stress occupations.
+//  - leo_firefighter: law enforcement officers, firefighters, nuclear couriers, CBPO, etc.
+//  - atc: air traffic controllers (mandatory retirement at 56 vs 57 for the others)
+export type SpecialProvisionType = 'none' | 'leo_firefighter' | 'atc' | 'other';
+
 export interface ServicePeriod {
   id: string;
   startDate: Date;
   endDate?: Date; // Omit if current
   system: RetirementSystem;
   isActive: boolean; // Current employment
+  specialProvision?: boolean; // Covered under FERS special provisions (1.7%/1.0% accrual)
 }
 
 export interface NonFederalEmploymentPeriod {
@@ -100,6 +106,10 @@ export interface EmploymentInfo {
   // Military service buyback: active-duty years count toward FERS service only if a deposit is paid
   militaryServiceYears?: number; // Years of active-duty military service
   militaryDepositPaid?: boolean; // Whether the military deposit has been (or will be) paid
+  // FERS special provisions: when set, FERS service periods are treated as covered service
+  // (1.7%/1.0% accrual, age-50/20 or any-age/25 eligibility, immediate COLA, supplement
+  // earnings-test exempt until MRA). Per-period overrides via ServicePeriod.specialProvision.
+  specialProvisionType?: SpecialProvisionType;
 }
 
 export interface RetirementInfo {
@@ -398,6 +408,11 @@ export const DEFAULT_LIFE_EXPECTANCY = 85; // Average life expectancy
 // FERS and CSRS constants
 export const FERS_ACCRUAL_RATE = 0.01; // 1% per year (standard)
 export const FERS_ENHANCED_ACCRUAL_RATE = 0.011; // 1.1% per year (age 62+ with 20+ years)
+// FERS special provisions (LEO/FF/ATC/etc.): 1.7% for the first 20 covered years, 1% after.
+export const FERS_SPECIAL_ACCRUAL_RATE = 0.017;
+export const FERS_SPECIAL_FIRST_YEARS = 20;
+// Mandatory separation ages by special category
+export const SPECIAL_MANDATORY_RETIREMENT_AGE = { atc: 56, leo_firefighter: 57, other: 57 };
 export const FERS_SUPPLEMENT_AGE = 62;
 export const MRA_10_ANNUAL_REDUCTION = 0.05; // 5% per year under 62 for MRA+10 retirees
 export const MEDICARE_PART_B_MONTHLY_2024 = 174.70; // Standard Part B premium; grows with healthcareInflation

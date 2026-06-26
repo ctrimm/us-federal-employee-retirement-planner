@@ -21,6 +21,7 @@ import {
   isFEHBEligible,
   calculateServiceBySystem,
   creditableServicePeriods,
+  resolveSpecialYears,
 } from './systemDetection';
 import { calculateRetirementTax, TAX_BRACKET_BASE_YEAR } from './taxCalculator';
 import type { FilingStatus } from './taxCalculator';
@@ -40,17 +41,25 @@ export function determineEligibility(profile: UserProfile): EligibilityInfo {
   const sickLeaveCredit = (profile.employment.sickLeaveHours || 0) / STANDARD_WORK_HOURS_PER_YEAR;
   const totalYears = calculateTotalService(creditablePeriods) + sickLeaveCredit;
 
-  const { fersYears, csrsYears } = calculateServiceBySystem(
+  const { fersYears, csrsYears, specialYears } = calculateServiceBySystem(
     creditablePeriods,
     profile.employment.sickLeaveHours || 0
   );
 
-  const canRetire = canRetireNow(currentAge, totalYears, profile.personal.birthYear);
+  // Special provisions: covered FERS years drive earlier eligibility (age 50 + 20, or 25 any age).
+  const militaryCredit = profile.employment.militaryDepositPaid ? (profile.employment.militaryServiceYears || 0) : 0;
+  const effSpecialYears = resolveSpecialYears(profile.employment, Math.max(0, fersYears - militaryCredit), specialYears);
 
-  const earliestInfo = calculateEarliestRetirementAge(
-    profile.personal.birthYear,
-    creditablePeriods
-  );
+  const canRetire = effSpecialYears > 0
+    ? (effSpecialYears >= 25 || (currentAge >= 50 && effSpecialYears >= 20))
+    : canRetireNow(currentAge, totalYears, profile.personal.birthYear);
+
+  const earliestInfo = effSpecialYears > 0
+    ? {
+        age: effSpecialYears >= 25 ? Math.min(currentAge, 50) : 50,
+        yearsOfService: totalYears,
+      }
+    : calculateEarliestRetirementAge(profile.personal.birthYear, creditablePeriods);
 
   // Calculate earliest retirement date
   const earliestRetirementDate = new Date(
@@ -166,19 +175,21 @@ function calculateFERSSupplement(
   detectedSystem: string,
   ssEstimate?: number,
   veraEligible: boolean = false,
-  mra: number = 57
+  mra: number = 57,
+  specialEligible: boolean = false
 ): number {
   // Only for FERS employees
   if (detectedSystem === 'CSRS') return 0;
 
-  // Only for immediate full annuity (MRA with 30+ years, or age 60+ with 20+ years) or VERA.
-  // MRA+10 / postponed / deferred retirements do NOT qualify.
+  // Eligible for an immediate full annuity (MRA with 30+ years, or age 60+ with 20+ years), a
+  // VERA early-out, or a special-provision retirement. MRA+10/postponed/deferred do NOT qualify.
   const qualifiesForSupplement =
-    totalYears >= 30 || (totalYears >= 20 && claimPensionAge >= 60) || veraEligible;
+    totalYears >= 30 || (totalYears >= 20 && claimPensionAge >= 60) || veraEligible || specialEligible;
   if (!qualifiesForSupplement) return 0;
 
-  // Payment window: from retirement (or MRA, whichever is later for a VERA early-out) to age 62.
-  const supplementStartAge = veraEligible ? Math.max(claimPensionAge, mra) : claimPensionAge;
+  // Payment window ends at 62. Special-provision retirees receive it immediately at retirement;
+  // a VERA early-out does not begin until MRA.
+  const supplementStartAge = veraEligible && !specialEligible ? Math.max(claimPensionAge, mra) : claimPensionAge;
   if (age < supplementStartAge || age >= 62) return 0;
 
   // OPM computes the supplement using the estimated SS benefit *at age 62*. A user's SSA
@@ -254,6 +265,18 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
   const veraEligibleForSupplement = profile.retirement.earlyOutVERA === true &&
     ((claimPensionAge >= 50 && eligibilityForSupplement.totalYearsOfService >= 20) ||
       eligibilityForSupplement.totalYearsOfService >= 25);
+
+  // ── FERS special provisions (LEO / firefighter / ATC / etc.) ──────────────────
+  // Covered FERS years drive the enhanced accrual, immediate COLA, the supplement, and an
+  // earnings-test exemption until MRA. (The accrual itself is applied in calculateAnnualPension.)
+  const { fersYears: fersYearsForSpecial, specialYears: specialYearsFromPeriods } =
+    calculateServiceBySystem(creditableServicePeriods(profile.employment), profile.employment.sickLeaveHours || 0);
+  const militaryCreditYears = profile.employment.militaryDepositPaid ? (profile.employment.militaryServiceYears || 0) : 0;
+  const effectiveSpecialYears = resolveSpecialYears(
+    profile.employment, Math.max(0, fersYearsForSpecial - militaryCreditYears), specialYearsFromPeriods);
+  const primaryIsSpecial = effectiveSpecialYears > 0;
+  const specialRetirementEligible = primaryIsSpecial &&
+    ((claimPensionAge >= 50 && effectiveSpecialYears >= 20) || effectiveSpecialYears >= 25);
 
   // ── One-time separation payouts (paid in the first projection year out of service) ──
   // Lump-sum unused annual leave (paid at the final hourly salary rate) + optional VSIP.
@@ -449,7 +472,8 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       primarySystem,
       age,
       claimPensionAge,
-      profile.assumptions.colaRate
+      profile.assumptions.colaRate,
+      primaryIsSpecial // special-provision retirees receive COLAs immediately (not deferred to 62)
     ) : 0;
     // First annuity year is prorated for the separation-month / "first of next month" gap.
     if (hasPension && age === claimPensionAge) pension *= firstYearAnnuityFraction;
@@ -522,7 +546,8 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       supplementDetectedSystem,
       userSSEstimate,
       veraEligibleForSupplement,
-      mraForSupplement
+      mraForSupplement,
+      specialRetirementEligible
     );
     // Prorate the supplement's first year for the separation-month gap (same as the annuity).
     if (fersSupplement > 0 && age === claimPensionAge) fersSupplement *= firstYearAnnuityFraction;
@@ -665,9 +690,11 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     }
 
     // FERS Supplement earnings test: reduce the supplement $1 for every $2 of *earned* income
-    // (part-time/side-hustle wages) above the annual Social Security limit.
+    // (part-time/side-hustle wages) above the annual Social Security limit. Special-provision
+    // retirees are EXEMPT from the earnings test until they reach their MRA.
+    const earningsTestExempt = primaryIsSpecial && age < mraForSupplement;
     let supplementEarningsTestReduction = 0;
-    if (fersSupplement > 0 && otherIncome > SS_ANNUAL_EARNINGS_LIMIT) {
+    if (!earningsTestExempt && fersSupplement > 0 && otherIncome > SS_ANNUAL_EARNINGS_LIMIT) {
       supplementEarningsTestReduction = Math.min(
         fersSupplement,
         (otherIncome - SS_ANNUAL_EARNINGS_LIMIT) / 2
