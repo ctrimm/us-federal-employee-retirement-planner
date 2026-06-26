@@ -263,8 +263,50 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
   // tspBalance is always the sum of both for backward-compatible output fields
   let tspBalance = tspTradBalance + tspRothBalance;
 
-  // Initialize other investments tracking
-  let otherInvestmentsBalance = profile.otherInvestments?.totalBalance || 0;
+  // ── Other investments: categorize accounts by tax treatment ───────────────────
+  //   deferred  = Traditional IRA / 401k (or taxDeferred): withdrawals are ordinary income, RMD applies
+  //   roth      = Roth IRA: withdrawals tax-free, no RMD
+  //   taxable   = brokerage / savings: only the gain portion is taxed (long-term capital gains)
+  //   illiquid  = real estate / other: grows for net worth but is not drawn down as income
+  const otherAccounts = profile.otherInvestments?.accounts || [];
+  const otherAccountCategory = (a: { type: string; taxDeferred?: boolean }): 'deferred' | 'roth' | 'taxable' | 'illiquid' => {
+    if (a.type === 'roth_ira') return 'roth';
+    if (a.type === 'traditional_ira' || a.type === '401k' || a.taxDeferred) return 'deferred';
+    if (a.type === 'brokerage' || a.type === 'savings') return 'taxable';
+    return 'illiquid';
+  };
+  // Fixed weighted return per pool (from initial balances; defaults to 6.5%).
+  const poolReturn = (cat: 'deferred' | 'roth' | 'taxable' | 'illiquid'): number => {
+    const accts = otherAccounts.filter((a) => otherAccountCategory(a) === cat);
+    const tot = accts.reduce((s, a) => s + (a.currentBalance || 0), 0);
+    if (accts.length === 0 || tot === 0) return 0.065;
+    return accts.reduce((r, a) => r + ((a.currentBalance || 0) / tot) * ((a.returnAssumption || 6.5) / 100), 0);
+  };
+  const deferredReturn = poolReturn('deferred');
+  const rothReturn = poolReturn('roth');
+  const taxableReturn = poolReturn('taxable');
+  const illiquidReturn = poolReturn('illiquid');
+  // Annual contributions per pool (added only while still accumulating, i.e. before leaving service).
+  const contribByCat = { deferred: 0, roth: 0, taxable: 0, illiquid: 0 };
+  for (const a of otherAccounts) contribByCat[otherAccountCategory(a)] += (a.annualContribution || 0);
+
+  // Initialize pool balances (+ cost basis for the taxable pool).
+  let otherDeferredBalance = 0, otherRothBalance = 0, otherTaxableBalance = 0, otherTaxableBasis = 0, otherIlliquidBalance = 0;
+  for (const a of otherAccounts) {
+    const cat = otherAccountCategory(a);
+    const bal = a.currentBalance || 0;
+    if (cat === 'deferred') otherDeferredBalance += bal;
+    else if (cat === 'roth') otherRothBalance += bal;
+    else if (cat === 'taxable') { otherTaxableBalance += bal; otherTaxableBasis += bal; }
+    else otherIlliquidBalance += bal;
+  }
+  // Fallback: a bare totalBalance with no account detail is treated as a taxable brokerage account.
+  if (otherAccounts.length === 0 && (profile.otherInvestments?.totalBalance || 0) > 0) {
+    otherTaxableBalance = profile.otherInvestments!.totalBalance!;
+    otherTaxableBasis = otherTaxableBalance;
+  }
+  // Running aggregate (used by net-worth, FIRE, and guardrails references).
+  let otherInvestmentsBalance = otherDeferredBalance + otherRothBalance + otherTaxableBalance + otherIlliquidBalance;
 
   // Initialize debts (deep copy to avoid mutating original)
   const debts = (profile.planning?.debts || []).map(d => ({ ...d }));
@@ -471,8 +513,7 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       }
     }
 
-    // ── Non-federal 401k growth + contributions ───────────────────────────────
-    // Grow the non-TSP 401k pool each year
+    // ── Non-federal 401k: contributions while working, drawdown in retirement ──────
     const nonFed401kReturnRate = activeNonFederalPeriod?.return401kAssumption ?? profile.tsp.returnAssumption;
     // Add contributions from an active non-federal period (while the user is in that job)
     // We treat the non-federal period as active up until leaveServiceAge (when they return to federal)
@@ -483,7 +524,17 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       const employerMatchAmt = salary * (matchPct / 100);
       nonFederal401kBalance += annualContrib + employerMatchAmt;
     }
-    nonFederal401kBalance *= (1 + nonFed401kReturnRate / 100);
+    // Drawdown in retirement: a non-federal 401k is pre-tax, so withdrawals are ordinary
+    // income and subject to RMDs once the RMD age is reached.
+    let nonFed401kDistribution = 0;
+    if (canAccessTSP && nonFederal401kBalance > 0) {
+      nonFed401kDistribution = nonFederal401kBalance * (effectiveWithdrawalRate / 100);
+      if (age >= rmdAge) {
+        const rmd = requiredMinimumDistribution(nonFederal401kBalance, age);
+        if (rmd > nonFed401kDistribution) nonFed401kDistribution = Math.min(rmd, nonFederal401kBalance);
+      }
+    }
+    nonFederal401kBalance = Math.max(0, (nonFederal401kBalance - nonFed401kDistribution) * (1 + nonFed401kReturnRate / 100));
 
     // ── Full spouse income modeling ───────────────────────────────────────────
     let spouseIncome = 0;
@@ -586,20 +637,48 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       separationPayoutDone = true;
     }
 
-    // Calculate other investments growth using weighted-average return rate + annual contributions
-    const otherAccounts = profile.otherInvestments?.accounts || [];
-    const otherAnnualContributions = otherAccounts.reduce((sum, account) => sum + (account.annualContribution || 0), 0);
-    let weightedReturnRate: number;
-    if (otherAccounts.length === 0 || otherInvestmentsBalance === 0) {
-      weightedReturnRate = 0.065; // Default 6.5%
-    } else {
-      const totalAccountBalances = otherAccounts.reduce((sum, a) => sum + a.currentBalance, 0) || otherInvestmentsBalance;
-      weightedReturnRate = otherAccounts.reduce((rate, account) => {
-        const weight = totalAccountBalances > 0 ? account.currentBalance / totalAccountBalances : 1 / otherAccounts.length;
-        return rate + weight * ((account.returnAssumption || 6.5) / 100);
-      }, 0);
+    // ── Other investments: draw down liquid pools in retirement, then grow ─────────
+    // Each pool is drawn at the same rate as the TSP once retired and accessible. Deferred
+    // is ordinary income (+RMD); Roth is tax-free; taxable realizes capital gains on the
+    // gain portion only; illiquid (real estate/other) is never drawn, only grown.
+    const onlyContributeWhileWorking = stillWorking ? 1 : 0;
+    let otherDeferredDistribution = 0;
+    let otherRothDistribution = 0;
+    let otherTaxableDistribution = 0;
+    let otherTaxableGains = 0;
+    if (canAccessTSP) {
+      otherDeferredDistribution = otherDeferredBalance * (effectiveWithdrawalRate / 100);
+      if (age >= rmdAge) {
+        const rmd = requiredMinimumDistribution(otherDeferredBalance, age);
+        if (rmd > otherDeferredDistribution) otherDeferredDistribution = Math.min(rmd, otherDeferredBalance);
+      }
+      otherRothDistribution = otherRothBalance * (effectiveWithdrawalRate / 100);
+      otherTaxableDistribution = otherTaxableBalance * (effectiveWithdrawalRate / 100);
+      // Realized gain portion = withdrawal × embedded unrealized-gain fraction.
+      const gainFraction = otherTaxableBalance > 0
+        ? Math.max(0, (otherTaxableBalance - otherTaxableBasis) / otherTaxableBalance)
+        : 0;
+      otherTaxableGains = otherTaxableDistribution * gainFraction;
     }
-    otherInvestmentsBalance = (otherInvestmentsBalance + otherAnnualContributions) * (1 + weightedReturnRate);
+    // Update pools: subtract distributions, add (working-year) contributions, then grow.
+    otherDeferredBalance = Math.max(0, (otherDeferredBalance - otherDeferredDistribution +
+      contribByCat.deferred * onlyContributeWhileWorking) * (1 + deferredReturn));
+    otherRothBalance = Math.max(0, (otherRothBalance - otherRothDistribution +
+      contribByCat.roth * onlyContributeWhileWorking) * (1 + rothReturn));
+    // Taxable basis tracks the principal: reduced by the non-gain portion withdrawn, increased by contributions.
+    const taxablePrincipalWithdrawn = otherTaxableDistribution - otherTaxableGains;
+    otherTaxableBasis = Math.max(0, otherTaxableBasis - taxablePrincipalWithdrawn +
+      contribByCat.taxable * onlyContributeWhileWorking);
+    otherTaxableBalance = Math.max(0, (otherTaxableBalance - otherTaxableDistribution +
+      contribByCat.taxable * onlyContributeWhileWorking) * (1 + taxableReturn));
+    otherIlliquidBalance = Math.max(0, (otherIlliquidBalance +
+      contribByCat.illiquid * onlyContributeWhileWorking) * (1 + illiquidReturn));
+
+    // Combined non-TSP portfolio drawdown income for this year.
+    const otherInvestmentsDistribution = otherDeferredDistribution + otherRothDistribution +
+      otherTaxableDistribution + nonFed401kDistribution;
+    // Refresh the running aggregate used by net-worth / FIRE / guardrails.
+    otherInvestmentsBalance = otherDeferredBalance + otherRothBalance + otherTaxableBalance + otherIlliquidBalance;
 
     // Calculate inflated living expenses for this year
     const yearsFromStart = age - startAge;
@@ -667,9 +746,9 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     const totalDebt = debts.reduce((sum, d) => sum + d.currentBalance, 0);
 
     // Total income (pension + TSP + Social Security + FERS Supplement + other sources
-    // + one-time separation payouts)
+    // + non-TSP portfolio drawdown + one-time separation payouts)
     const totalIncome = pension + tspDistribution + socialSecurity + fersSupplement +
-      spouseIncome + otherIncome + lumpSumLeavePayout + vsipPayout;
+      spouseIncome + otherIncome + otherInvestmentsDistribution + lumpSumLeavePayout + vsipPayout;
 
     // Net income (after expenses and taxes) — progressive federal + optional state tax
     const filingStatus: FilingStatus = spouse ? 'married' : 'single';
@@ -680,8 +759,10 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     const rothConversionThisYear = !stillWorking
       ? Math.min(profile.tsp.rothConversionAnnual || 0, tspTradBalance + tspTradDistribution)
       : 0;
+    // Deferred non-TSP withdrawals (Traditional IRA/401k + non-federal 401k) are ordinary
+    // income; Roth withdrawals are excluded; taxable-account gains are taxed as capital gains.
     const ordinaryIncome = pension + fersSupplement + tspTradDistribution + rothConversionThisYear +
-      otherIncome + lumpSumLeavePayout + vsipPayout +
+      otherIncome + otherDeferredDistribution + nonFed401kDistribution + lumpSumLeavePayout + vsipPayout +
       spousePension + spouseTspDistribution +
       (spouse && spouseCurrentAge + (age - currentAge) < spouseLeaveServiceAge ? spouseCurrentIncome : 0) +
       (spouse?.retirementIncome || 0);
@@ -695,6 +776,7 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       primaryAge: age,
       spouseAge: spouseAgeThisYear,
       stateTaxRate: profile.assumptions.stateTaxRate,
+      capitalGains: otherTaxableGains,
       inflationFactor: taxInflationFactor,
     });
     const netIncome = totalIncome - totalExpenses - taxResult.totalTax;
@@ -753,6 +835,7 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       socialSecurity,
       fersSupplement,
       otherIncome,
+      otherInvestmentsDistribution,
       lumpSumLeavePayout,
       vsipPayout,
       supplementEarningsTestReduction,
@@ -768,6 +851,7 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       federalTax: taxResult.federalTax,
       stateTax: taxResult.stateTax,
       totalTax: taxResult.totalTax,
+      capitalGainsTax: taxResult.capitalGainsTax,
       effectiveTaxRate: taxResult.effectiveRate,
       expenses: totalExpenses,
       collegeCosts,

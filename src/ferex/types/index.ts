@@ -288,6 +288,7 @@ export interface ProjectionYear {
   socialSecurity: number; // If applicable
   fersSupplement: number; // FERS Supplement (paid from retirement to age 62 for eligible FERS retirees)
   otherIncome: number; // Part-time work, side hustle, etc.
+  otherInvestmentsDistribution?: number; // Drawdown income from non-TSP accounts + non-federal 401k
   // One-time separation inflows (paid in the year federal service ends)
   lumpSumLeavePayout?: number; // Unused annual leave paid out at retirement
   vsipPayout?: number; // VSIP separation incentive
@@ -308,6 +309,7 @@ export interface ProjectionYear {
   federalTax?: number;
   stateTax?: number;
   totalTax?: number;
+  capitalGainsTax?: number; // Long-term capital gains tax on taxable-account withdrawals
   effectiveTaxRate?: number;
   expenses: number; // Total annual expenses
   collegeCosts: number; // Annual college costs for children (subset of expenses)

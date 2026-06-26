@@ -123,23 +123,30 @@ Guaranteed income includes pension, FERS supplement, and Social Security. Non-li
 | ChubbyFIRE multiplier | 125% | Comfortable spending tier |
 | FatFIRE multiplier | 150% | Luxury spending tier |
 | Federal tax | 2024 brackets, indexed | Progressive (single/MFJ); brackets + standard deduction inflation-indexed forward |
-| State tax | 0% | Optional flat rate on pension/TSP income (excludes SS & Roth) |
+| Capital gains | 0/15/20% | LTCG on taxable-account gains, stacked on ordinary income |
+| State tax | 0% | Optional flat rate on ordinary income + taxable SS + gains (excludes Roth) |
 | Social Security | 30% of High-3 | Conservative WEP-adjusted estimate (FERS only) |
 | Medicare Part B | $174.70/mo (2024) | Starts at age 65 once not working; grows with healthcare inflation |
-| TSP RMDs | Age 73 / 75 | Forced taxable Traditional distributions (IRS Uniform Lifetime Table) |
+| RMDs | Age 73 / 75 | Forced taxable Traditional TSP/IRA/401k distributions (Uniform Lifetime Table) |
+| Account drawdown | Withdrawal rate | TSP + non-fed 401k + other accounts drawn and taxed by type; real estate not auto-drawn |
 | Life expectancy | 85 | Adjustable in profile |
 
 **What's modeled (income & taxes):**
 - **All taxable income is taxed:** pension, FERS supplement, Traditional TSP distributions, Roth conversions, lump-sum leave, VSIP, part-time/Barista wages, side-hustle/self-employment, and spouse income. Roth TSP distributions and the non-taxable portion of Social Security are correctly excluded.
-- Federal tax uses **2024 progressive brackets** (single/MFJ) with the standard deduction + age-65 addition ($1,950 single / $1,550 each married). Brackets and the standard deduction are **inflation-indexed** to each projection year (the SS provisional-income thresholds are not — they are fixed in statute).
+- **The whole portfolio produces retirement income.** In addition to the TSP, the non-federal 401k and each "other investment" account are drawn down at the withdrawal rate once retired, taxed by account type:
+  - *Traditional IRA / 401k (and non-federal 401k):* withdrawals are **ordinary income**, and **RMDs** apply.
+  - *Roth IRA:* withdrawals are **tax-free**, no RMD.
+  - *Brokerage / savings (taxable):* only the **gain portion** of each withdrawal is taxed, at **long-term capital gains** rates (0% / 15% / 20%, stacked on ordinary income, inflation-indexed).
+  - *Real estate / other:* treated as **illiquid** — they grow for net worth but are not auto-drawn as income.
+- Federal tax uses **2024 progressive brackets** (single/MFJ) with the standard deduction + age-65 addition ($1,950 single / $1,550 each married). Brackets, the standard deduction, and the LTCG breakpoints are **inflation-indexed** to each projection year (the SS provisional-income thresholds are not — they are fixed in statute).
 - Social Security taxation phases in per the IRS worksheet (lesser-of computation), capped at 85% of benefits.
-- **Required Minimum Distributions** from the Traditional TSP begin at age 73 (born ≤1959) or 75 (born 1960+) using the IRS Uniform Lifetime Table, forcing taxable income even at low drawdown rates. Roth TSP has no RMD.
-- State tax is an optional flat rate on ordinary income + taxable SS (excludes the non-taxable SS portion and all Roth distributions); it does not model state-specific pension exemptions.
+- **Required Minimum Distributions** begin at age 73 (born ≤1959) or 75 (born 1960+) using the IRS Uniform Lifetime Table, forcing taxable income from Traditional TSP/IRA/401k balances even at low drawdown rates. Roth has no RMD.
+- State tax is an optional flat rate on ordinary income + taxable SS + capital gains (excludes the non-taxable SS portion and Roth distributions); it does not model state-specific pension exemptions.
 
 **Known simplifications:**
 - **IRMAA** (high-income Medicare Part B/D surcharges) is not modeled.
 - Social Security benefit estimate is an approximation — actual benefit requires an SSA earnings record. CSRS service earns no SS.
-- "Other investments" and non-rolled-over non-federal 401k balances grow and count toward net worth/FIRE but are not drawn down as spendable income in the year-by-year projection (only the TSP is); their growth is also untaxed.
+- Taxable-account **cost basis** is assumed to equal the entered current balance (so only post-projection growth is treated as a capital gain) — conservative when real embedded gains are larger. Taxable-account growth is taxed on withdrawal (as gains realized), not as annual dividend/interest drag.
 - FEHB premiums are community-rated (no age surcharge); FEHB↔Medicare coordination isn't modeled as a premium reduction.
 - CSRS survivor annuity uses the same 10% reduction / 50% survivor benefit as the FERS standard election (CSRS actually allows up to 55%).
 

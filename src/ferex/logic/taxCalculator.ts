@@ -47,6 +47,13 @@ const BRACKETS_MFJ: TaxBracket[] = [
   { rate: 0.37, upTo: Infinity },
 ];
 
+// 2024 long-term capital gains rate breakpoints (taxable-income thresholds).
+// LTCG stacks on top of ordinary taxable income: 0% / 15% / 20%.
+const LTCG_0_RATE_CEILING_SINGLE = 47_025;
+const LTCG_0_RATE_CEILING_MFJ = 94_050;
+const LTCG_15_RATE_CEILING_SINGLE = 518_900;
+const LTCG_15_RATE_CEILING_MFJ = 583_750;
+
 // 2024 Standard deductions
 const STANDARD_DEDUCTION_SINGLE = 14_600;
 const STANDARD_DEDUCTION_MFJ = 29_200;
@@ -116,6 +123,42 @@ function ssTaxableAmount(
   return Math.min(taxable, 0.85 * annualSSBenefit);
 }
 
+/**
+ * Long-term capital gains tax. LTCG is taxed at 0% / 15% / 20% and stacks *on top of*
+ * ordinary taxable income, so the rate depends on where the gains fall relative to the
+ * ordinary income already used up. Thresholds are inflation-indexed.
+ */
+function capitalGainsTax(
+  ordinaryTaxableIncome: number,
+  gains: number,
+  filingStatus: FilingStatus,
+  inflationFactor: number
+): number {
+  if (gains <= 0) return 0;
+
+  const ceiling0 = (filingStatus === 'married' ? LTCG_0_RATE_CEILING_MFJ : LTCG_0_RATE_CEILING_SINGLE) * inflationFactor;
+  const ceiling15 = (filingStatus === 'married' ? LTCG_15_RATE_CEILING_MFJ : LTCG_15_RATE_CEILING_SINGLE) * inflationFactor;
+
+  let pos = Math.max(0, ordinaryTaxableIncome);
+  let remaining = gains;
+  let tax = 0;
+
+  // 0% band
+  const inZero = Math.min(remaining, Math.max(0, ceiling0 - pos));
+  remaining -= inZero;
+  pos += inZero;
+
+  // 15% band
+  const in15 = Math.min(remaining, Math.max(0, ceiling15 - pos));
+  tax += in15 * 0.15;
+  remaining -= in15;
+
+  // 20% band
+  tax += Math.max(0, remaining) * 0.20;
+
+  return tax;
+}
+
 export interface TaxInputs {
   /** Ordinary income: pension + FERS supplement + TSP distributions */
   ordinaryIncome: number;
@@ -132,6 +175,11 @@ export interface TaxInputs {
   /** Optional flat state income tax rate (e.g. 5 for 5%). Applies to total income. */
   stateTaxRate?: number;
   /**
+   * Realized long-term capital gains this year (e.g. the gain portion of taxable-brokerage
+   * withdrawals). Taxed at preferential 0/15/20% rates stacked on ordinary taxable income.
+   */
+  capitalGains?: number;
+  /**
    * Inflation factor (≥1) applied to bracket thresholds and the standard deduction to
    * approximate the IRS's annual inflation indexing. Defaults to 1 (no indexing). The SS
    * provisional-income thresholds are NOT indexed (they are fixed in statute).
@@ -140,11 +188,12 @@ export interface TaxInputs {
 }
 
 export interface TaxResult {
-  federalTax: number;
+  federalTax: number;     // ordinary income tax + long-term capital gains tax
   stateTax: number;
   totalTax: number;
   effectiveRate: number;  // total tax / gross income
   taxableSSBenefit: number;
+  capitalGainsTax: number;
 }
 
 /**
@@ -158,12 +207,13 @@ export function calculateRetirementTax(inputs: TaxInputs): TaxResult {
     primaryAge,
     spouseAge,
     stateTaxRate,
+    capitalGains = 0,
     inflationFactor = 1,
   } = inputs;
 
-  const grossIncome = ordinaryIncome + socialSecurityIncome;
+  const grossIncome = ordinaryIncome + socialSecurityIncome + Math.max(0, capitalGains);
   if (grossIncome <= 0) {
-    return { federalTax: 0, stateTax: 0, totalTax: 0, effectiveRate: 0, taxableSSBenefit: 0 };
+    return { federalTax: 0, stateTax: 0, totalTax: 0, effectiveRate: 0, taxableSSBenefit: 0, capitalGainsTax: 0 };
   }
 
   // Standard deduction (base + extra for each person 65+), inflation-indexed.
@@ -182,17 +232,21 @@ export function calculateRetirementTax(inputs: TaxInputs): TaxResult {
   const taxableIncome = Math.max(0, agi - standardDeduction);
 
   const brackets = filingStatus === 'married' ? BRACKETS_MFJ : BRACKETS_SINGLE;
-  const federalTax = applyBrackets(taxableIncome, brackets, inflationFactor);
+  const ordinaryTax = applyBrackets(taxableIncome, brackets, inflationFactor);
 
-  // State tax: flat rate applied to ordinary income + taxable SS portion (federal AGI).
-  // This excludes the non-taxable portion of Social Security and all Roth distributions
+  // Long-term capital gains stack on top of ordinary taxable income at 0/15/20%.
+  const capGainsTax = capitalGainsTax(taxableIncome, Math.max(0, capitalGains), filingStatus, inflationFactor);
+  const federalTax = ordinaryTax + capGainsTax;
+
+  // State tax: flat rate applied to ordinary income + taxable SS + capital gains (federal-ish
+  // base). Excludes the non-taxable portion of Social Security and all Roth distributions
   // (which are not in ordinaryIncome). Most income-taxing states exempt SS entirely; this
   // is a reasonable middle-ground simplification rather than taxing gross income.
-  const stateTaxableBase = Math.max(0, ordinaryIncome + taxableSSBenefit);
+  const stateTaxableBase = Math.max(0, ordinaryIncome + taxableSSBenefit + Math.max(0, capitalGains));
   const stateTax = stateTaxableBase * ((stateTaxRate || 0) / 100);
 
   const totalTax = federalTax + stateTax;
   const effectiveRate = grossIncome > 0 ? totalTax / grossIncome : 0;
 
-  return { federalTax, stateTax, totalTax, effectiveRate, taxableSSBenefit };
+  return { federalTax, stateTax, totalTax, effectiveRate, taxableSSBenefit, capitalGainsTax: capGainsTax };
 }
