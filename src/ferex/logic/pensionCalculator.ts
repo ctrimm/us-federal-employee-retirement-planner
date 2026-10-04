@@ -18,7 +18,7 @@ import {
   SURVIVOR_ANNUITY_REDUCTION,
   MRA_10_ANNUAL_REDUCTION,
 } from '../types';
-import { calculateServiceBySystem, calculateMRA, creditableServicePeriods, resolveSpecialYears, projectServicePeriodsToSeparation, separationDateForProfile } from './systemDetection';
+import { calculateServiceBySystem, calculateMRA, creditableServicePeriods, resolveSpecialYears, projectServicePeriodsToSeparation, separationDateForProfile, serviceMonths } from './systemDetection';
 
 /**
  * Calculate High-3 average salary
@@ -160,7 +160,29 @@ export function calculateAnnualPension(profile: UserProfile): PensionBreakdown {
     calculateServiceBySystem(creditablePeriods, profile.employment.sickLeaveHours || 0);
 
   // Retirement age is used to determine whether the 1.1% enhanced FERS accrual applies
-  const retirementAge = profile.retirement.intendedRetirementAge || profile.retirement.leaveServiceAge;
+  // and the MRA+10 reduction window. Quick Check profiles may not set it (the dashboard
+  // sliders default to 62), so fall back to max(62, currentAge) — the same default the UI
+  // displays — instead of leaving the 1.1% rule permanently off.
+  const currentAge = new Date().getFullYear() - profile.personal.birthYear;
+  const retirementAge = profile.retirement.intendedRetirementAge
+    || profile.retirement.leaveServiceAge
+    || Math.max(62, currentAge);
+
+  // ── 5-year vesting gate ──────────────────────────────────────────────────
+  // FERS/CSRS pay no annuity with fewer than 5 years of creditable civilian service,
+  // measured at separation and excluding sick leave (annuity computation only).
+  // Unvested → $0 pension, flagged so the UI can explain instead of showing $0.
+  if (serviceMonths(totalYearsExSick) < 60) {
+    return {
+      high3,
+      yearsOfService: totalYears,
+      accrualRate: FERS_ACCRUAL_RATE,
+      survivorReduction: 0,
+      annualPension: 0,
+      monthlyPension: 0,
+      isVested: false,
+    };
+  }
 
   // Resolve FERS years covered under special provisions (military buyback stays regular).
   // Eligibility-relevant: sick leave never counts toward the 20/25-year thresholds.
@@ -191,18 +213,20 @@ export function calculateAnnualPension(profile: UserProfile): PensionBreakdown {
   // MRA, or 20+ yrs at 60), a VERA early-out, or a special-provision retirement (50/20 or 25).
   // Eligibility thresholds use service EXCLUDING sick leave (annuity computation only).
   const veraEligible = profile.retirement.earlyOutVERA === true &&
-    ((retirementAge !== undefined && retirementAge >= 50 && totalYearsExSick >= 20) || totalYearsExSick >= 25);
+    ((retirementAge >= 50 && serviceMonths(totalYearsExSick) >= 240) || serviceMonths(totalYearsExSick) >= 300);
   const specialEligible = effSpecialYears > 0 &&
-    ((retirementAge !== undefined && retirementAge >= 50 && effSpecialYears >= 20) || effSpecialYears >= 25);
+    ((retirementAge >= 50 && serviceMonths(effSpecialYears) >= 240) || serviceMonths(effSpecialYears) >= 300);
   let mra10ReductionPercent = 0;
-  if (fersYearsExSick > 0 && retirementAge !== undefined && !veraEligible && !specialEligible) {
+  if (fersYearsExSick > 0 && !veraEligible && !specialEligible) {
     const leaveAge = profile.retirement.leaveServiceAge ?? retirementAge;
     const mra = calculateMRA(profile.personal.birthYear);
     // Immediate full annuity: 30+ years AT MRA, or 20+ years at 60+. (30 years before MRA
-    // is a deferred annuity, not an immediate one.)
-    const isImmediateFullAnnuity = (fersYearsExSick >= 30 && leaveAge >= mra) ||
-      (fersYearsExSick >= 20 && leaveAge >= 60);
-    const isMRA10 = !isImmediateFullAnnuity && fersYearsExSick >= 10 && leaveAge >= mra && leaveAge < 62;
+    // is a deferred annuity, not an immediate one.) Compared in whole months so a full
+    // 30-calendar-year span (29.993 in 365.25-day years) is not misread as MRA+10.
+    const fersMonths = serviceMonths(fersYearsExSick);
+    const isImmediateFullAnnuity = (fersMonths >= 360 && leaveAge >= mra) ||
+      (fersMonths >= 240 && leaveAge >= 60);
+    const isMRA10 = !isImmediateFullAnnuity && fersMonths >= 120 && leaveAge >= mra && leaveAge < 62;
 
     if (isMRA10 && retirementAge < 62) {
       mra10ReductionPercent = Math.min((62 - retirementAge) * MRA_10_ANNUAL_REDUCTION, 1.0);

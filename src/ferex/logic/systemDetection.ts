@@ -10,31 +10,56 @@ const FERS_START_DATE = new Date('1984-01-01');
 
 /**
  * Planned separation date for a profile: Jan 1 of the year they turn leaveServiceAge
- * (falling back to the intended claim age, then to the current age = no projection).
+ * (falling back to the intended claim age). When neither is on file (e.g. a Quick Check
+ * profile before the dashboard is touched), use today so active service is measured
+ * through now rather than truncated to Jan 1 of the current year.
  */
 export function separationDateForProfile(profile: UserProfile): Date {
-  const currentYear = new Date().getFullYear();
-  const currentAge = currentYear - profile.personal.birthYear;
-  const sepAge = profile.retirement.leaveServiceAge
-    ?? profile.retirement.intendedRetirementAge
-    ?? currentAge;
+  const sepAge = profile.retirement.leaveServiceAge ?? profile.retirement.intendedRetirementAge;
+  if (sepAge === undefined) return new Date();
   return new Date(profile.personal.birthYear + sepAge, 0, 1);
 }
 
 /**
+ * Whole months of service for eligibility-threshold checks, from a decimal year figure.
+ * Rounds (rather than floors) so a full 30-calendar-year span — which the 365.25-day
+ * year renders as 29.993 — correctly clears the 360-month bar. Tolerance ≈ ±15 days.
+ */
+export function serviceMonths(years: number): number {
+  return Math.round(years * 12);
+}
+
+/** Whole calendar months between two dates (OPM-style service credit). */
+export function wholeMonthsBetween(start: Date, end: Date): number {
+  let months =
+    (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+  if (end.getDate() < start.getDate()) months -= 1;
+  return Math.max(0, months);
+}
+
+/** Creditable service in whole calendar months across periods (through today if open). */
+export function serviceMonthsForPeriods(periods: ServicePeriod[]): number {
+  let months = 0;
+  for (const p of periods) {
+    const start = new Date(p.startDate);
+    const end = p.endDate ? new Date(p.endDate) : new Date();
+    months += wholeMonthsBetween(start, end);
+  }
+  return months;
+}
+
+/**
  * Project service periods forward to the planned separation date.
- * Active open-ended periods (no endDate) are extended to the separation date so the
- * annuity reflects service the employee will have earned by retirement — never truncated:
- * the end date used is the later of today and the separation date.
+ * Active open-ended periods (no endDate) end at the separation date, so the annuity
+ * reflects service earned by retirement — never extended past it. (A past separation
+ * date therefore freezes service there instead of accruing through today.)
  */
 export function projectServicePeriodsToSeparation(
   periods: ServicePeriod[],
   separationDate: Date
 ): ServicePeriod[] {
-  const now = new Date();
-  const end = separationDate > now ? separationDate : now;
   return periods.map((p) =>
-    p.isActive && !p.endDate ? { ...p, endDate: new Date(end) } : p
+    p.isActive && !p.endDate ? { ...p, endDate: new Date(separationDate) } : p
   );
 }
 
@@ -210,7 +235,9 @@ export function calculateMRA(birthYear: number): number {
 }
 
 /**
- * Check if employee can retire immediately
+ * Check if employee can retire immediately.
+ * Service thresholds are compared in whole months so a full 30-calendar-year span
+ * (29.993 in 365.25-day years) correctly qualifies.
  */
 export function canRetireNow(
   currentAge: number,
@@ -218,64 +245,50 @@ export function canRetireNow(
   birthYear: number
 ): boolean {
   const mra = calculateMRA(birthYear);
+  const months = serviceMonths(totalYearsOfService);
 
   // Age 62 with 5+ years
-  if (currentAge >= 62 && totalYearsOfService >= 5) return true;
+  if (currentAge >= 62 && months >= 60) return true;
 
   // Age 60 with 20+ years
-  if (currentAge >= 60 && totalYearsOfService >= 20) return true;
+  if (currentAge >= 60 && months >= 240) return true;
 
   // MRA with 30+ years
-  if (currentAge >= mra && totalYearsOfService >= 30) return true;
+  if (currentAge >= mra && months >= 360) return true;
 
   // MRA with 10+ years (MRA+10)
-  if (currentAge >= mra && totalYearsOfService >= 10) return true;
+  if (currentAge >= mra && months >= 120) return true;
 
   return false;
 }
 
 /**
- * Calculate earliest retirement age
- * Checks conditions in order from most to least favorable (most years first)
+ * Calculate earliest retirement age.
+ * Projects service forward year by year for active employees, so someone who will
+ * cross a service threshold (e.g. 30 years at MRA) gets that age — not the next
+ * age-based rule. Each candidate age is tested against the immediate-retirement rules.
  */
 export function calculateEarliestRetirementAge(
   birthYear: number,
   servicePeriods: ServicePeriod[]
 ): { age: number; yearsOfService: number } {
-  const mra = calculateMRA(birthYear);
   const currentYear = new Date().getFullYear();
   const currentAge = currentYear - birthYear;
 
-  // Calculate total years of service
-  const totalYears = calculateTotalService(servicePeriods);
+  const currentMonths = serviceMonthsForPeriods(servicePeriods);
+  const accrues = servicePeriods.some((p) => p.isActive && !p.endDate);
 
-  // Check most favorable condition first: MRA with 30+ years (immediate full annuity).
-  // Each branch returns the later of the threshold age and the current age — the
-  // earliest age is "now" once the employee is already past the threshold.
-  if (totalYears >= 30) {
-    return { age: Math.max(mra, currentAge), yearsOfService: totalYears };
+  for (let age = currentAge; age <= 70; age++) {
+    const monthsAtAge = currentMonths + (accrues ? Math.max(0, age - currentAge) * 12 : 0);
+    if (canRetireNow(age, monthsAtAge / 12, birthYear)) {
+      return { age, yearsOfService: monthsAtAge / 12 };
+    }
   }
 
-  // Age 60 with 20+ years (immediate full annuity)
-  if (totalYears >= 20) {
-    return { age: Math.max(60, currentAge), yearsOfService: totalYears };
-  }
-
-  // MRA with 10+ years (MRA+10, deferred or reduced annuity)
-  if (totalYears >= 10) {
-    return { age: Math.max(mra, currentAge), yearsOfService: totalYears };
-  }
-
-  // Age 62 with 5+ years
-  if (totalYears >= 5) {
-    return { age: Math.max(62, currentAge), yearsOfService: 5 };
-  }
-
-  // If not yet eligible, calculate when they will be (need 5 years for age-62 retirement)
-  const yearsUntil5Years = Math.max(0, 5 - totalYears);
-  const ageWith5Years = currentAge + yearsUntil5Years;
-
-  return { age: Math.max(62, ageWith5Years), yearsOfService: 5 };
+  // Practically unreachable (62+5 always hits by 70): fall back to the 5-year vesting date.
+  const monthsShort = Math.max(0, 60 - currentMonths);
+  const yearsShort = Math.ceil(monthsShort / 12);
+  return { age: Math.max(62, currentAge + yearsShort), yearsOfService: 5 };
 }
 
 /**
@@ -296,7 +309,7 @@ export function isFEHBEligible(
   birthYear: number
 ): boolean {
   // Must meet the 5-year (approximated by service) coverage requirement
-  if (totalYearsOfService < 5) return false;
+  if (serviceMonths(totalYearsOfService) < 60) return false;
 
   // Must retire on an immediate annuity
   return canRetireNow(ageAtRetirement, totalYearsOfService, birthYear);

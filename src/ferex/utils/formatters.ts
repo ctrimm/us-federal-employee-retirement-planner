@@ -35,11 +35,14 @@ export function formatCompactNumber(num: number): string {
 }
 
 /**
- * Format years of service
+ * Format years of service. Normalizes through whole months so 29.993 years
+ * (a full 30 calendar years under 365.25-day math) reads "30 years", never
+ * "29 years, 12 months".
  */
 export function formatYearsOfService(years: number): string {
-  const wholeYears = Math.floor(years);
-  const months = Math.round((years - wholeYears) * 12);
+  const totalMonths = Math.round(years * 12);
+  const wholeYears = Math.floor(totalMonths / 12);
+  const months = totalMonths % 12;
 
   if (months === 0) {
     return `${wholeYears} years`;

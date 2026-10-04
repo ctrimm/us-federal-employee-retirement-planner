@@ -193,9 +193,15 @@ export function Dashboard({
           <p className="text-3xl font-bold">
             {formatCurrency(pensionBreakdown.monthlyPension)}
           </p>
-          <p className="text-sm text-muted-foreground mt-1">
-            {formatCurrency(pensionBreakdown.annualPension)} / year
-          </p>
+          {pensionBreakdown.isVested === false ? (
+            <p className="text-sm text-amber-600 mt-1">
+              Not vested — a federal annuity requires 5 years of creditable service.
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground mt-1">
+              {formatCurrency(pensionBreakdown.annualPension)} / year
+            </p>
+          )}
         </Card>
 
         {/* Years of Service */}

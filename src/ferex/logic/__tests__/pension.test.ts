@@ -180,3 +180,118 @@ describe('regression: pension projects future service to separation (bug #1)', (
     expect(pen.annualPension).toBeCloseTo(40_800, -2); // within $100
   });
 });
+
+describe('regression: 2026-10-04 pressure-test findings', () => {
+  // Bug 1: exact 30 calendar years at MRA must be immediate UNREDUCED (not MRA+10 reduced).
+  // The 365.25-day year renders 1997-01-01→2027-01-01 as 29.993, which failed the >= 30 check.
+  it('30.0 calendar years at MRA 57: unreduced $30,000, no MRA+10 reduction', () => {
+    const p = profile({
+      personal: { birthYear: 1970, gender: 'male' }, // MRA 57
+      employment: {
+        servicePeriods: [
+          { id: 'p1', startDate: new Date('1997-01-01'), system: 'FERS', isActive: true },
+        ],
+        currentOrLastSalary: 100_000,
+      },
+      retirement: { survivorAnnuityType: 'none', intendedRetirementAge: 57, leaveServiceAge: 57 },
+    });
+    const pen = calculateAnnualPension(p);
+    expect(pen.mra10ReductionPercent).toBeUndefined();
+    expect(pen.annualPension).toBeCloseTo(30_000, -2); // within $100
+  });
+
+  // Bug 1 (eligibility): 56yo with 29.75 yrs becomes MRA+30 eligible at 57, not 60.
+  it('eligibility: 56yo with 29.75 yrs → earliest retirement at 57, not 60', () => {
+    const p = profile({
+      personal: { birthYear: 1970, gender: 'male' },
+      employment: {
+        servicePeriods: [
+          { id: 'p1', startDate: new Date('1997-01-01'), system: 'FERS', isActive: true },
+        ],
+        currentOrLastSalary: 100_000,
+      },
+      retirement: { survivorAnnuityType: 'none' }, // Quick Check leaves ages undefined
+    });
+    const elig = determineEligibility(p);
+    expect(elig.canRetireImmediately).toBe(false); // 56 < MRA 57
+    expect(elig.earliestRetirementAge).toBe(57);
+  });
+
+  // Bug 2: 1.1% must apply at 62/20+ even when the profile has no explicit retirement
+  // ages (Quick Check flow) — the engine falls back to max(62, currentAge).
+  it('1.1% accrual at 62 with 20+ yrs (no explicit retirement ages on profile)', () => {
+    const p = profile({
+      personal: { birthYear: 1964, gender: 'male' }, // 62 in 2026
+      employment: {
+        servicePeriods: [
+          { id: 'p1', startDate: new Date('2004-06-01'), system: 'FERS', isActive: true },
+        ],
+        currentOrLastSalary: 120_000,
+      },
+      retirement: { survivorAnnuityType: 'none' },
+    });
+    const pen = calculateAnnualPension(p);
+    expect(pen.accrualRate).toBeCloseTo(0.011, 4);
+    expect(pen.mra10ReductionPercent).toBeUndefined();
+    expect(pen.annualPension).toBeGreaterThan(28_000); // ~$29.5k, not the $26.8k at 1.0%
+  });
+
+  // Bug 4: service is measured at the planned separation date, not extended to today.
+  it('service stops at the planned separation date, not today', () => {
+    const p = profile({
+      personal: { birthYear: 1964, gender: 'male' },
+      employment: {
+        servicePeriods: [
+          { id: 'p1', startDate: new Date('2004-06-01'), system: 'FERS', isActive: true },
+        ],
+        currentOrLastSalary: 120_000,
+      },
+      retirement: { survivorAnnuityType: 'none', intendedRetirementAge: 62, leaveServiceAge: 62 },
+    });
+    const pen = calculateAnnualPension(p);
+    // Separation Jan 1 2026 → ~21.58 yrs; must NOT run through today (~22.3)
+    expect(pen.yearsOfService).toBeLessThan(22.0);
+    expect(pen.yearsOfService).toBeGreaterThan(21.0);
+  });
+
+  // Bug 5: FERS 5-year vesting — no annuity with <5 years at separation.
+  it('unvested (<5 yrs at separation): $0 pension', () => {
+    const p = profile({
+      personal: { birthYear: 1985, gender: 'male' },
+      employment: {
+        servicePeriods: [
+          {
+            id: 'p1',
+            startDate: new Date('2020-01-01'),
+            endDate: new Date('2024-01-01'),
+            system: 'FERS',
+            isActive: false,
+          },
+        ],
+        currentOrLastSalary: 100_000,
+      },
+      retirement: { survivorAnnuityType: 'none', intendedRetirementAge: 62, leaveServiceAge: 62 },
+    });
+    const pen = calculateAnnualPension(p);
+    expect(pen.annualPension).toBe(0);
+    expect(pen.monthlyPension).toBe(0);
+    expect(pen.isVested).toBe(false);
+  });
+
+  // Bug 5 (projected): 4 years today but 25 by 62 → vested via projection.
+  it('4 yrs today but 25 projected by 62: vested, pension > 0', () => {
+    const p = profile({
+      personal: { birthYear: 1985, gender: 'male' }, // 41 in 2026
+      employment: {
+        servicePeriods: [
+          { id: 'p1', startDate: new Date('2022-01-01'), system: 'FERS', isActive: true },
+        ],
+        currentOrLastSalary: 100_000,
+      },
+      retirement: { survivorAnnuityType: 'none', intendedRetirementAge: 62, leaveServiceAge: 62 },
+    });
+    const pen = calculateAnnualPension(p);
+    expect(pen.isVested).not.toBe(false);
+    expect(pen.annualPension).toBeGreaterThan(20_000);
+  });
+});

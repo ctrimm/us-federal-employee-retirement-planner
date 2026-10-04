@@ -60,6 +60,11 @@ export function ExpressOnboarding({ onComplete, onCancel }: ExpressOnboardingPro
   };
 
   const handleComplete = () => {
+    // Default the retirement ages to max(62, currentAge) — the same default the dashboard
+    // sliders display — so the engine (1.1% accrual, service projection) sees real values
+    // instead of undefined from the moment the profile is created.
+    const currentAge = new Date().getFullYear() - birthYear;
+    const defaultRetirementAge = Math.max(62, currentAge);
     const profile: UserProfile = {
       personal: {
         birthYear,
@@ -70,6 +75,8 @@ export function ExpressOnboarding({ onComplete, onCancel }: ExpressOnboardingPro
       },
       retirement: {
         survivorAnnuityType: 'none',
+        intendedRetirementAge: defaultRetirementAge,
+        leaveServiceAge: defaultRetirementAge,
       },
       tsp: {
         currentBalance: tspBalance,

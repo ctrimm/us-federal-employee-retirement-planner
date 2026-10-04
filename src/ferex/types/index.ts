@@ -400,6 +400,7 @@ export interface PensionBreakdown {
   annualPension: number;
   monthlyPension: number;
   mra10ReductionPercent?: number; // MRA+10 early-retirement reduction applied (e.g. 0.25 = 25%)
+  isVested?: boolean; // false when <5 years creditable service at separation → $0 annuity
 }
 
 // Default values for new profiles

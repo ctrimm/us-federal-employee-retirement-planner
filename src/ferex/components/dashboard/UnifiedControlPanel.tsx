@@ -87,12 +87,14 @@ export function UnifiedControlPanel({
   const currentAge = currentYear - profile.personal.birthYear;
   const lifeExpectancy = profile.personal.lifeExpectancy || 85;
 
-  // Basics Tab
+  // Basics Tab — slider defaults match the engine fallback (max(62, currentAge)) so the
+  // UI and the pension calculation agree even for profiles created before these fields existed.
+  const uiDefaultRetirementAge = Math.max(62, currentAge);
   const [leaveServiceAge, setLeaveServiceAge] = useState(
-    profile.retirement.leaveServiceAge || profile.retirement.intendedRetirementAge || 62
+    profile.retirement.leaveServiceAge || profile.retirement.intendedRetirementAge || uiDefaultRetirementAge
   );
   const [claimPensionAge, setClaimPensionAge] = useState(
-    profile.retirement.intendedRetirementAge || 62
+    profile.retirement.intendedRetirementAge || uiDefaultRetirementAge
   );
   const [tspDrawdownRate, setTspDrawdownRate] = useState(
     profile.assumptions.tspDrawdownRate || 4
