@@ -1,22 +1,21 @@
 ---
-import Layout from '../layouts/main.astro';
-import { Button } from "@/components/ui/button"
+import { FerexApp } from '../ferex/components/FerexApp';
+import '../styles/global.css';
+
+const title = 'FEREX - Federal Employee Retirement Explorer';
+const description = 'Calculate your federal retirement benefits including FERS, CSRS, TSP, and survivor benefits.';
 ---
 
-<Layout
-	title="Home - Astro React Shadcn Template"
-	description="A modern web application template built with Astro, React, Tailwind CSS, and shadcn/ui components"
->
-	<div class="flex items-center justify-center min-h-screen">
-		<Button>Click for Confetti! 🎉</Button>
-	</div>
-</Layout>
-
-<script>
-	import confetti from 'canvas-confetti';
-	const button = document.querySelector('[data-slot="button"]');
-
-	if (button) {
-		button.addEventListener('click', () => confetti());
-	}
-</script>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{title}</title>
+  <meta name="description" content={description} />
+  <link rel="icon" type="image/svg+xml" href={`${import.meta.env.BASE_URL}/favicon.svg`} />
+</head>
+<body>
+  <FerexApp client:load />
+</body>
+</html>
