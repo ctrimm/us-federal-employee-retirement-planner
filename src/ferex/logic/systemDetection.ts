@@ -224,13 +224,18 @@ export function resolveSpecialYears(
 }
 
 /**
- * Determine Minimum Retirement Age (MRA) based on birth year
+ * Determine Minimum Retirement Age (MRA) based on birth year.
+ *
+ * OPM's table has fractional MRAs (e.g. 1969 → 56 years 10 months). This codebase
+ * works in whole years, so fractional MRAs round UP to the next whole year — the
+ * conservative direction: at the returned age the employee is definitely at MRA,
+ * whereas rounding down would grant eligibility months early.
  */
 export function calculateMRA(birthYear: number): number {
   if (birthYear < 1948) return 55;
-  if (birthYear >= 1948 && birthYear <= 1952) return 55;
-  if (birthYear >= 1953 && birthYear <= 1964) return 56;
-  if (birthYear >= 1965 && birthYear <= 1969) return 56;
+  if (birthYear <= 1952) return 56; // 55y2m – 55y10m
+  if (birthYear <= 1964) return 56;
+  if (birthYear <= 1969) return 57; // 56y2m – 56y10m
   return 57; // 1970 and later
 }
 

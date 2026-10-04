@@ -295,3 +295,18 @@ describe('regression: 2026-10-04 pressure-test findings', () => {
     expect(pen.annualPension).toBeGreaterThan(20_000);
   });
 });
+
+describe('MRA table — fractional MRAs round up (2026-10-04 audit)', () => {
+  it('1965–1969 → 57 (not 56); 1948–1952 → 56 (not 55)', async () => {
+    const { calculateMRA } = await import('../systemDetection');
+    expect(calculateMRA(1947)).toBe(55);
+    expect(calculateMRA(1948)).toBe(56);
+    expect(calculateMRA(1952)).toBe(56);
+    expect(calculateMRA(1953)).toBe(56);
+    expect(calculateMRA(1964)).toBe(56);
+    expect(calculateMRA(1965)).toBe(57);
+    expect(calculateMRA(1969)).toBe(57);
+    expect(calculateMRA(1970)).toBe(57);
+    expect(calculateMRA(1980)).toBe(57);
+  });
+});

@@ -5,6 +5,7 @@
 
 import type {
   UserProfile,
+  ServicePeriod,
   ProjectionYear,
   EligibilityInfo,
   PensionBreakdown,
@@ -24,6 +25,8 @@ import {
   creditableServicePeriods,
   resolveSpecialYears,
   projectServicePeriodsToSeparation,
+  serviceMonths,
+  serviceMonthsForPeriods,
 } from './systemDetection';
 import { calculateRetirementTax, TAX_BRACKET_BASE_YEAR, bracketCeilingForRate, standardDeductionFor } from './taxCalculator';
 import type { FilingStatus } from './taxCalculator';
@@ -31,6 +34,35 @@ import {
   MEDICARE_PART_B_MONTHLY_2024, MEDICARE_PART_B_BASE_YEAR, LEAN_FIRE_MULTIPLIER, CHUBBY_FIRE_MULTIPLIER, FAT_FIRE_MULTIPLIER,
   SS_AGE62_TO_FRA_RATIO, SS_ANNUAL_EARNINGS_LIMIT, STANDARD_WORK_HOURS_PER_YEAR, DEFAULT_TAXABLE_BASIS_FRACTION,
 } from '../types';
+
+/**
+ * Earliest age at which the employee qualifies for a FULL UNREDUCED immediate annuity
+ * (MRA+30, 60+20, or 62+5 — or 50+20 / 25-any-age for special provisions),
+ * projecting service forward for active employees.
+ */
+function calculateFullBenefitsAge(
+  birthYear: number,
+  servicePeriods: ServicePeriod[],
+  specialMonths: number
+): number {
+  const mra = calculateMRA(birthYear);
+  const currentYear = new Date().getFullYear();
+  const currentAge = currentYear - birthYear;
+  const currentMonths = serviceMonthsForPeriods(servicePeriods);
+  const accrues = servicePeriods.some((p) => p.isActive && !p.endDate);
+
+  for (let age = currentAge; age <= 70; age++) {
+    const months = currentMonths + (accrues ? Math.max(0, age - currentAge) * 12 : 0);
+    // Special provisions: unreduced at 50+20 or 25 at any age
+    if (specialMonths >= 300) return Math.max(age, currentAge);
+    if (specialMonths >= 240 && age >= 50) return Math.max(age, 50);
+    // Regular FERS: MRA+30, 60+20, or 62+5
+    if (age >= mra && months >= 360) return age;
+    if (age >= 60 && months >= 240) return age;
+    if (age >= 62 && months >= 60) return age;
+  }
+  return 62;
+}
 
 /**
  * Determine eligibility information for a user profile
@@ -52,12 +84,12 @@ export function determineEligibility(profile: UserProfile): EligibilityInfo {
   const effSpecialYears = resolveSpecialYears(profile.employment, Math.max(0, fersYearsExSick - militaryCredit), specialYears);
 
   const canRetire = effSpecialYears > 0
-    ? (effSpecialYears >= 25 || (currentAge >= 50 && effSpecialYears >= 20))
+    ? (serviceMonths(effSpecialYears) >= 300 || (currentAge >= 50 && serviceMonths(effSpecialYears) >= 240))
     : canRetireNow(currentAge, totalYearsExSick, profile.personal.birthYear);
 
   const earliestInfo = effSpecialYears > 0
     ? {
-        age: effSpecialYears >= 25 ? currentAge : Math.max(50, currentAge),
+        age: serviceMonths(effSpecialYears) >= 300 ? currentAge : Math.max(50, currentAge),
         yearsOfService: totalYearsExSick,
       }
     : calculateEarliestRetirementAge(profile.personal.birthYear, creditablePeriods);
@@ -69,8 +101,13 @@ export function determineEligibility(profile: UserProfile): EligibilityInfo {
     1
   );
 
-  // Full benefits age (typically 62 with 5+ years for FERS)
-  const fullBenefitsAge = 62;
+  // Full unreduced benefits age — NOT always 62: MRA+30 gets it at MRA, 60+20 at 60.
+  // Projected forward for active employees still earning toward a threshold.
+  const fullBenefitsAge = calculateFullBenefitsAge(
+    profile.personal.birthYear,
+    creditablePeriods,
+    serviceMonths(effSpecialYears)
+  );
   const fullBenefitsDate = new Date(
     profile.personal.birthYear + fullBenefitsAge,
     0,
@@ -229,10 +266,12 @@ function calculateFERSSupplement(
   // Eligible for an immediate full annuity (MRA with 30+ years, or age 60+ with 20+ years), a
   // VERA early-out, or a special-provision retirement. MRA+10/postponed/deferred do NOT qualify.
   // The 30-year branch requires claiming at/after MRA: separating earlier with 30 years yields
-  // a deferred annuity, which carries no supplement.
+  // a deferred annuity, which carries no supplement. Compared in whole months so a full
+  // 30-calendar-year span (29.993 in 365.25-day years) is not misread as ineligible.
+  const months = serviceMonths(totalYears);
   const qualifiesForSupplement =
-    (totalYears >= 30 && claimPensionAge >= mra) ||
-    (totalYears >= 20 && claimPensionAge >= 60) ||
+    (months >= 360 && claimPensionAge >= mra) ||
+    (months >= 240 && claimPensionAge >= 60) ||
     veraEligible || specialEligible;
   if (!qualifiesForSupplement) return 0;
 
@@ -351,7 +390,7 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     profile.employment, Math.max(0, projectedFersYearsExSick - militaryCreditYears), specialYearsFromPeriods);
   const primaryIsSpecial = effectiveSpecialYears > 0;
   const specialRetirementEligible = primaryIsSpecial &&
-    ((claimPensionAge >= 50 && effectiveSpecialYears >= 20) || effectiveSpecialYears >= 25);
+    ((claimPensionAge >= 50 && serviceMonths(effectiveSpecialYears) >= 240) || serviceMonths(effectiveSpecialYears) >= 300);
 
   // ── Immediate vs deferred annuity ─────────────────────────────────────────────
   // The annuity is immediate only if the separation itself qualifies: an immediate

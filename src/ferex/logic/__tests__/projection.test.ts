@@ -3,7 +3,7 @@
  * Run: npm test
  */
 import { describe, it, expect } from 'vitest';
-import { generateProjections } from '../projectionEngine';
+import { generateProjections, determineEligibility } from '../projectionEngine';
 import { DEFAULT_ASSUMPTIONS, DEFAULT_TSP } from '../../types';
 import type { UserProfile } from '../../types';
 
@@ -224,5 +224,77 @@ describe('FERS supplement earnings test — golden path', () => {
     expect(at57.supplementEarningsTestReduction).toBeGreaterThan(0);
     expect(at57.fersSupplement).toBeGreaterThan(0);
     expect(at57.fersSupplement).toBeLessThan(15_750);
+  });
+});
+
+describe('regression: 2026-10-04 audit findings', () => {
+  // The FERS supplement's 30-year bar had the same 29.993 drift as the pension:
+  // 1997-01-01→2027-01-01 is 30 calendar years but 29.993 decimal, which failed >= 30.
+  it('supplement pays on exactly 30 calendar years at MRA (29.993 decimal)', () => {
+    const p = profile({
+      personal: { birthYear: 1970, gender: 'male' }, // MRA 57
+      employment: {
+        servicePeriods: [
+          { id: 'p1', startDate: new Date('1997-01-01'), system: 'FERS', isActive: true },
+        ],
+        currentOrLastSalary: 100_000,
+        socialSecurityEstimate: 30_000,
+      },
+      retirement: { survivorAnnuityType: 'none', intendedRetirementAge: 57, leaveServiceAge: 57 },
+    });
+    const projs = generateProjections(p);
+    const at57 = projs.find((x) => x.age === 57)!;
+    // Supplement ≈ SS62 × (30/40) = 30,000×0.70×0.75 ≈ $15,750/yr
+    expect(at57.fersSupplement).toBeGreaterThan(10_000);
+    const at62 = projs.find((x) => x.age === 62)!;
+    expect(at62.fersSupplement).toBe(0); // supplement ends at 62
+  });
+});
+
+describe('full unreduced benefits age (2026-10-04 audit)', () => {
+  it('MRA+30: full unreduced at MRA (57), not 62', () => {
+    const p = profile({
+      personal: { birthYear: 1970, gender: 'male' }, // MRA 57, 56 now
+      employment: {
+        servicePeriods: [
+          { id: 'p1', startDate: new Date('1997-01-01'), system: 'FERS', isActive: true },
+        ],
+        currentOrLastSalary: 100_000,
+      },
+      retirement: { survivorAnnuityType: 'none' },
+    });
+    const elig = determineEligibility(p);
+    expect(elig.fullBenefitsAge).toBe(57);
+  });
+
+  it('60+20: full unreduced at 60, not 62', () => {
+    const p = profile({
+      personal: { birthYear: 1970, gender: 'male' }, // 56 now
+      employment: {
+        servicePeriods: [
+          { id: 'p1', startDate: new Date('2004-01-01'), system: 'FERS', isActive: true },
+        ],
+        currentOrLastSalary: 100_000,
+      },
+      retirement: { survivorAnnuityType: 'none' },
+    });
+    const elig = determineEligibility(p);
+    // 22 yrs now → 26 at 60: 60+20 hits at 60
+    expect(elig.fullBenefitsAge).toBe(60);
+  });
+
+  it('62+5 only: full unreduced at 62', () => {
+    const p = profile({
+      personal: { birthYear: 1970, gender: 'male' }, // 56 now
+      employment: {
+        servicePeriods: [
+          { id: 'p1', startDate: new Date('2018-01-01'), system: 'FERS', isActive: true },
+        ],
+        currentOrLastSalary: 100_000,
+      },
+      retirement: { survivorAnnuityType: 'none' },
+    });
+    const elig = determineEligibility(p);
+    expect(elig.fullBenefitsAge).toBe(62);
   });
 });
