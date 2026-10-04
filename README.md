@@ -51,10 +51,10 @@ FEREX identifies four key financial independence milestones by calculating portf
 | 10+ years of service | MRA (MRA+10, may be reduced) |
 | 5+ years of service  | Age 62 |
 
-**MRA by birth year** (transitional months simplified to whole years):
-- Before 1953: 55
-- 1953–1969: 56
-- 1970+: 57
+**MRA by birth year** (OPM's transitional months rounded up to whole years, the conservative direction):
+- Before 1948: 55
+- 1948–1964: 56
+- 1965 and later: 57
 
 ### FERS Supplement
 FERS employees who retire on an immediate full annuity (**MRA with 30+ years, or age 60+ with 20+ years**) receive the FERS Supplement from retirement until age 62. MRA+10, deferred, and disability retirements do **not** qualify. It approximates the Social Security benefit earned during federal service:
