@@ -13,6 +13,7 @@ import { NetWorthChart } from '../charts/NetWorthChart';
 import { ExpensesChart } from '../charts/ExpensesChart';
 import { TaxBreakdownChart } from '../charts/TaxBreakdownChart';
 import { ProjectionTable } from './ProjectionTable';
+import { Disclaimer } from '../Disclaimer';
 
 interface DashboardProps {
   scenario: Scenario;
@@ -200,13 +201,13 @@ export function Dashboard({
         {/* Years of Service */}
         <Card className="p-6 hover:shadow-lg transition-shadow">
           <h3 className="text-sm font-medium text-muted-foreground mb-2">
-            Total Service
+            Total Service at Retirement
           </h3>
           <p className="text-3xl font-bold">
-            {Math.floor(eligibility.totalYearsOfService)}
+            {Math.floor(pensionBreakdown?.yearsOfService ?? eligibility.totalYearsOfService)}
           </p>
           <p className="text-sm text-muted-foreground mt-1">
-            {formatYearsOfService(eligibility.totalYearsOfService)}
+            {formatYearsOfService(pensionBreakdown?.yearsOfService ?? eligibility.totalYearsOfService)}
           </p>
         </Card>
 
@@ -451,6 +452,10 @@ export function Dashboard({
 
       {/* Detailed Year-by-Year Projection Table */}
       <ProjectionTable projections={projections} />
+
+      <div className="mt-8">
+        <Disclaimer />
+      </div>
     </div>
   );
 }

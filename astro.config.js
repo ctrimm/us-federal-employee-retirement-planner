@@ -5,7 +5,9 @@ import sitemap from '@astrojs/sitemap';
 
 // https://astro.build/config
 export default defineConfig({
-  site: 'https://yourdomain.com', // Update this with your production URL
+  // GitHub Pages project site: https://ctrimm.github.io/us-federal-employee-retirement-planner
+  site: 'https://ctrimm.github.io',
+  base: '/us-federal-employee-retirement-planner',
   vite: {
     plugins: [tailwindcss()]
   },

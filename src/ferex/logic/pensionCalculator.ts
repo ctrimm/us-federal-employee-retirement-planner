@@ -18,7 +18,7 @@ import {
   SURVIVOR_ANNUITY_REDUCTION,
   MRA_10_ANNUAL_REDUCTION,
 } from '../types';
-import { calculateServiceBySystem, calculateMRA, creditableServicePeriods, resolveSpecialYears } from './systemDetection';
+import { calculateServiceBySystem, calculateMRA, creditableServicePeriods, resolveSpecialYears, projectServicePeriodsToSeparation, separationDateForProfile } from './systemDetection';
 
 /**
  * Calculate High-3 average salary
@@ -149,19 +149,23 @@ export function calculateMixedPension(
  */
 export function calculateAnnualPension(profile: UserProfile): PensionBreakdown {
   const high3 = calculateHigh3(profile);
-  // Include bought-back military service (if the deposit is paid) in creditable service.
-  const creditablePeriods = creditableServicePeriods(profile.employment);
-  const { fersYears, csrsYears, specialYears, totalYears } = calculateServiceBySystem(
-    creditablePeriods,
-    profile.employment.sickLeaveHours || 0
+  // Include bought-back military service (if the deposit is paid) in creditable service,
+  // and project active service through the planned separation date so the annuity
+  // reflects the service the employee will have earned by retirement.
+  const creditablePeriods = projectServicePeriodsToSeparation(
+    creditableServicePeriods(profile.employment),
+    separationDateForProfile(profile)
   );
+  const { fersYears, csrsYears, specialYears, totalYears, fersYearsExSick, totalYearsExSick } =
+    calculateServiceBySystem(creditablePeriods, profile.employment.sickLeaveHours || 0);
 
   // Retirement age is used to determine whether the 1.1% enhanced FERS accrual applies
   const retirementAge = profile.retirement.intendedRetirementAge || profile.retirement.leaveServiceAge;
 
   // Resolve FERS years covered under special provisions (military buyback stays regular).
+  // Eligibility-relevant: sick leave never counts toward the 20/25-year thresholds.
   const militaryCredit = profile.employment.militaryDepositPaid ? (profile.employment.militaryServiceYears || 0) : 0;
-  const effSpecialYears = resolveSpecialYears(profile.employment, Math.max(0, fersYears - militaryCredit), specialYears);
+  const effSpecialYears = resolveSpecialYears(profile.employment, Math.max(0, fersYearsExSick - militaryCredit), specialYears);
   const regularFersYears = Math.max(0, fersYears - effSpecialYears);
 
   // ── Compute gross annual pension (before survivor reduction) ──────────────
@@ -185,16 +189,20 @@ export function calculateAnnualPension(profile: UserProfile): PensionBreakdown {
   // ── MRA+10 early retirement reduction (regular FERS only) ─────────────────
   // Reduction = 5% per year under 62. NOT applied for an immediate full annuity (30+ yrs at
   // MRA, or 20+ yrs at 60), a VERA early-out, or a special-provision retirement (50/20 or 25).
+  // Eligibility thresholds use service EXCLUDING sick leave (annuity computation only).
   const veraEligible = profile.retirement.earlyOutVERA === true &&
-    ((retirementAge !== undefined && retirementAge >= 50 && totalYears >= 20) || totalYears >= 25);
+    ((retirementAge !== undefined && retirementAge >= 50 && totalYearsExSick >= 20) || totalYearsExSick >= 25);
   const specialEligible = effSpecialYears > 0 &&
     ((retirementAge !== undefined && retirementAge >= 50 && effSpecialYears >= 20) || effSpecialYears >= 25);
   let mra10ReductionPercent = 0;
-  if (fersYears > 0 && retirementAge !== undefined && !veraEligible && !specialEligible) {
+  if (fersYearsExSick > 0 && retirementAge !== undefined && !veraEligible && !specialEligible) {
     const leaveAge = profile.retirement.leaveServiceAge ?? retirementAge;
     const mra = calculateMRA(profile.personal.birthYear);
-    const isImmediateFullAnnuity = fersYears >= 30 || (fersYears >= 20 && leaveAge >= 60);
-    const isMRA10 = !isImmediateFullAnnuity && fersYears >= 10 && leaveAge >= mra && leaveAge < 62;
+    // Immediate full annuity: 30+ years AT MRA, or 20+ years at 60+. (30 years before MRA
+    // is a deferred annuity, not an immediate one.)
+    const isImmediateFullAnnuity = (fersYearsExSick >= 30 && leaveAge >= mra) ||
+      (fersYearsExSick >= 20 && leaveAge >= 60);
+    const isMRA10 = !isImmediateFullAnnuity && fersYearsExSick >= 10 && leaveAge >= mra && leaveAge < 62;
 
     if (isMRA10 && retirementAge < 62) {
       mra10ReductionPercent = Math.min((62 - retirementAge) * MRA_10_ANNUAL_REDUCTION, 1.0);
@@ -290,8 +298,15 @@ export function calculateSpouseAnnualPension(spouse: SpouseInfo): number {
     return 0;
   }
 
+  // Project a still-working spouse's service through their planned separation, mirroring
+  // the primary's treatment in calculateAnnualPension.
+  const currentYear = new Date().getFullYear();
+  const sepAge = spouse.leaveServiceAge || spouse.retirementAge || spouse.age;
+  const spouseSeparationDate = new Date(currentYear + Math.max(0, sepAge - spouse.age), 0, 1);
+  const projectedPeriods = projectServicePeriodsToSeparation(spouse.servicePeriods, spouseSeparationDate);
+
   const { fersYears, csrsYears, specialYears } = calculateServiceBySystem(
-    spouse.servicePeriods,
+    projectedPeriods,
     spouse.sickLeaveHours || 0
   );
 
@@ -314,7 +329,7 @@ export function calculateSpouseAnnualPension(spouse: SpouseInfo): number {
 
   // Mixed service
   if (fersYears > 0 && csrsYears > 0) {
-    return calculateMixedPension(spouse.high3Salary, spouse.servicePeriods, 'none', spouseRetAge);
+    return calculateMixedPension(spouse.high3Salary, projectedPeriods, 'none', spouseRetAge);
   }
 
   if (csrsYears > 0) {

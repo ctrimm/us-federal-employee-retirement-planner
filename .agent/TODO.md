@@ -1,5 +1,105 @@
 # FEREX Development TODO
 
+## Correctness review & engine fixes — 2026-10-03 (completed, branch `atlas/ferex-correctness-fixes`)
+
+### Review completed (2026-10-03)
+Cloned `ctrimm/us-federal-employee-retirement-planner`, read all five logic modules end to end,
+verified `npm run build` passes clean, and ran the engine against hand-computed cases via an
+esbuild-bundled verification script. Tax math verified correct: 2024 brackets, SS
+provisional-income worksheet, diet COLA, CSRS 2.5%/10% survivor formula, RMD Uniform Lifetime
+Table, FERS employer match. Postponed-annuity COLA treatment verified against OPM guidance
+(no COLAs accrue during postponement — engine matches).
+
+### Bugs confirmed (reproduced numerically before fixing)
+1. **Pension ignores future service.** `calculateAnnualPension` counts active service periods
+   through *today*, not projected to the planned separation age. A 45-year-old retiring at 57
+   gets $20,480/yr on 22.76 yrs instead of ~$40,800 on ~34 yrs. Affects every projection for
+   anyone not retiring immediately. Fix: project active periods to the separation date.
+2. **FEHB premiums not inflated from base year.** 2026 base costs inflated by years *since
+   retirement* instead of calendar years since 2026. Retiring at 57 in 2038 shows $4,200/yr;
+   correct is ~$7,540 at 5% healthcare inflation.
+3. **Medicare Part B not inflated from base year.** 2024 base ($174.70/mo) compounded by
+   `age - 65` instead of `year - 2024`. At 65 in 2046 shows $2,096/yr; correct is ~$6,130.
+4. **Sick leave counts toward eligibility (OPM: annuity computation only).** `canRetireNow`,
+   MRA+30 immediate-annuity test, VERA/special eligibility, and FEHB carry-in all use
+   service years inflated by sick-leave credit. 29.5 yrs + 1,500 sick hrs at MRA reports
+   immediate unreduced eligibility. (README already documents the correct rule — code
+   contradicted it.) Fix: separate "service for annuity" from "service for eligibility".
+5. **FERS supplement paid on deferred annuities.** The 30-year branch lacks the MRA gate, so
+   separating at 55 with 30 years (deferred to 62, no supplement owed) still pays ~$15.7k/yr.
+
+### Nits fixed on this branch
+- `types/index.ts` MRA comment said 1965+ → 57; function correctly gives 56 for 1965–1969.
+- `calculateEarliestRetirementAge` / special-provision earliest age used `Math.min` where
+  `Math.max` was needed — could return ages in the past.
+- College costs added in nominal dollars with no inflation adjustment (now inflated at the
+  expense inflation rate from the current year).
+- Debt payoff charged the full scheduled payment even when the remaining balance was smaller.
+- `requiredMinimumDistribution` hard-floored at 73; now takes the SECURE 2.0 start age as an
+  optional parameter (engine already gated correctly).
+- FERS Supplement earnings-test limit was frozen at the 2024 $22,320; now indexed by the
+  inflation assumption like other dollar constants.
+
+### Test plan (TDD — tests written first, run red, then fixed)
+- `src/ferex/logic/__tests__/pension.test.ts` — golden paths (FERS 1%/1.1%, CSRS tiers,
+  special provisions, survivor, COLA schedules, MRA+10) + regression tests for bugs 4 & 5.
+- `src/ferex/logic/__tests__/tax.test.ts` — golden bracket/SS-worksheet/LTCG cases.
+- `src/ferex/logic/__tests__/tsp.test.ts` — employer match, RMD ages/table, start-age param.
+- `src/ferex/logic/__tests__/projection.test.ts` — golden full-career projection + regression
+  tests for bugs 1, 2, 3, 5 (FEHB/Medicare inflation, deferred supplement, postponed COLA
+  gap, supplement earnings test).
+- Run: `npm test` (vitest). `npm run build` must stay green.
+
+### Still to do (not on this branch)
+- Social Security claiming-age choice (currently hardcoded 67), spousal SS, GPO.
+- State-tax treatment of Social Security (most states exempt; currently taxed as middle-ground).
+- Per-plan FEHB premiums (currently 2026 averages); PSHB transition.
+- Partial survivor annuity elections; savings-interest-as-ordinary-income; disability retirement.
+
+## GitHub Pages deployment — 2026-10-04 (branch `atlas/ferex-correctness-fixes`, committed)
+
+Cory asked for the Pages URL; none existed (Pages not enabled, no deployments).
+Set up deployment on the branch:
+- `astro.config.js`: `site: 'https://ctrimm.github.io'`, `base: '/us-federal-employee-retirement-planner'`
+- `.github/workflows/deploy.yml`: build + deploy to Pages on push to `main` (official actions/deploy-pages flow)
+- Fixed absolute hrefs (favicons, 404 home link, `/ferex` links) to respect the base path via `import.meta.env.BASE_URL`
+- Verified: production build emits correctly prefixed asset/page URLs + sitemap; tsc clean; 51/51 tests green.
+- Could NOT enable Pages via API (PUT /repos/.../pages → 404; credential lacks admin). Cory must do one click: repo Settings > Pages > Build and deployment > GitHub Actions, then push/merge the branch to `main`.
+- Live URL once enabled: https://ctrimm.github.io/us-federal-employee-retirement-planner/
+
+## Second completeness pass — 2026-10-03 (branch `atlas/ferex-correctness-fixes`, continued)
+
+Cory asked for another review "to be as correct as possible", plus a
+"not professional advice, just a tool" disclaimer and screenshots.
+
+### New bug found and fixed
+6. **Separating before MRA with 30+ years modeled as immediate.** The 30-year branch of
+   the immediate-annuity test didn't require MRA, so e.g. 38 years at 55 paid the full
+   annuity from 55. Per OPM that's a *deferred* annuity: nothing until 62, no supplement
+   ever, FEHB permanently forfeited. Fix: engine now computes `immediateAnnuityAtSeparation`
+   (immediate at separation age, incl. MRA+10 taken immediately, VERA, or special-provision)
+   and an `annuityStartAge` (claim age if immediate, else max(claim age, 62)). Pension,
+   supplement, FEHB, proration, and CoastFIRE timing all key off it. `calculateAnnualPension`
+   also requires MRA for the 30-year unreduced branch. 3 new tests; suite now 51.
+
+### UI consistency fix
+- Dashboard "Total Service" card showed service through *today* while the pension beside it
+  used service projected to separation (20y9m vs 33y12m on the sample). Now shows projected
+  "Total Service at Retirement".
+
+### Disclaimer
+- New `Disclaimer` component ("planning tool for educational purposes only — not
+  professional financial, tax, or legal advice") on the landing page and dashboard footer;
+  same text added to the README.
+
+### Verification
+- `npx tsc --noEmit` clean; `npm test` 51/51 green; `npm run build` green.
+- All three sample scenarios run end-to-end; screenshots taken of landing + dashboard.
+- Note: headless-shell Chrome (v153) in this sandbox intermittently crashes the renderer
+  on the Tailwind v4 CSS (flaky race, unrelated to the app); screenshots needed retries.
+
+---
+
 ## Current Sprint: MVP Development ✅ COMPLETE
 
 ### Phase 1: Foundation (✅ Complete)
@@ -229,16 +329,16 @@ See `.agent/DEPLOYMENT.md` for full deployment instructions including:
   - [ ] Mobile responsive
   - [ ] Cross-browser compatibility
 
-## Known Issues / Limitations
+## Known Issues / Limitations (refreshed 2026-10-03)
 
 1. **Simplified Calculations**: Some edge cases not yet handled:
-   - FERS Supplement calculations
-   - Special retirement categories (LEO, ATC, etc.)
+   - Social Security claiming-age choice (currently hardcoded to 67), spousal SS benefits, GPO
    - Disability retirement
-   - Deferred retirement
-
+   - State-specific pension/SS tax exemptions (flat-rate state tax is a simplification)
+   - Per-plan FEHB premiums (2026 averages used)
+   - Partial survivor annuity elections (full 50%/10% FERS pair assumed)
+   - Savings-account interest taxed at LTCG rates (documented simplification)
 2. **UI Polish**: MVP focuses on functionality over design:
-   - No charts/visualizations yet (table-based)
    - Basic styling
    - No animations
 

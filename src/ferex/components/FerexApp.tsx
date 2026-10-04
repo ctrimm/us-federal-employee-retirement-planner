@@ -11,6 +11,7 @@ import { ExpressOnboarding } from './onboarding/ExpressOnboarding';
 import { ComprehensiveOnboarding } from './onboarding/ComprehensiveOnboarding';
 import { Dashboard } from './dashboard/Dashboard';
 import { UnifiedControlPanel } from './dashboard/UnifiedControlPanel';
+import { Disclaimer } from './Disclaimer';
 import { sampleScenarios } from '../data/sampleScenarios';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -191,6 +192,10 @@ export function FerexApp() {
                 </Button>
               </div>
             )}
+
+            <div className="mt-16">
+              <Disclaimer />
+            </div>
           </div>
         </div>
       </div>

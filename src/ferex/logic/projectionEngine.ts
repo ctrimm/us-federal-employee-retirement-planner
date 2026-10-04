@@ -13,7 +13,7 @@ import type {
 import { DEFAULT_LIFE_EXPECTANCY } from '../types';
 import { calculateAnnualPension, calculatePensionWithColaSchedule, calculateSpouseAnnualPension } from './pensionCalculator';
 import { calculateEmployerMatch, requiredMinimumDistribution, rmdStartAge } from './tspCalculator';
-import { calculateAnnualFEHBCost } from './fehbCalculator';
+import { calculateAnnualFEHBCost, FEHB_BASE_YEAR } from './fehbCalculator';
 import {
   calculateTotalService,
   calculateMRA,
@@ -23,11 +23,12 @@ import {
   calculateServiceBySystem,
   creditableServicePeriods,
   resolveSpecialYears,
+  projectServicePeriodsToSeparation,
 } from './systemDetection';
 import { calculateRetirementTax, TAX_BRACKET_BASE_YEAR, bracketCeilingForRate, standardDeductionFor } from './taxCalculator';
 import type { FilingStatus } from './taxCalculator';
 import {
-  MEDICARE_PART_B_MONTHLY_2024, LEAN_FIRE_MULTIPLIER, CHUBBY_FIRE_MULTIPLIER, FAT_FIRE_MULTIPLIER,
+  MEDICARE_PART_B_MONTHLY_2024, MEDICARE_PART_B_BASE_YEAR, LEAN_FIRE_MULTIPLIER, CHUBBY_FIRE_MULTIPLIER, FAT_FIRE_MULTIPLIER,
   SS_AGE62_TO_FRA_RATIO, SS_ANNUAL_EARNINGS_LIMIT, STANDARD_WORK_HOURS_PER_YEAR, DEFAULT_TAXABLE_BASIS_FRACTION,
 } from '../types';
 
@@ -39,26 +40,25 @@ export function determineEligibility(profile: UserProfile): EligibilityInfo {
   const currentAge = currentYear - profile.personal.birthYear;
   // Include bought-back military service in creditable service totals.
   const creditablePeriods = creditableServicePeriods(profile.employment);
-  const sickLeaveCredit = (profile.employment.sickLeaveHours || 0) / STANDARD_WORK_HOURS_PER_YEAR;
-  const totalYears = calculateTotalService(creditablePeriods) + sickLeaveCredit;
-
-  const { fersYears, csrsYears, specialYears } = calculateServiceBySystem(
+  const { fersYears, csrsYears, specialYears, totalYearsExSick, fersYearsExSick } = calculateServiceBySystem(
     creditablePeriods,
     profile.employment.sickLeaveHours || 0
   );
+  // Eligibility decisions use service EXCLUDING sick leave: unused sick leave converts to
+  // service credit for the annuity computation only (OPM), never toward eligibility.
 
   // Special provisions: covered FERS years drive earlier eligibility (age 50 + 20, or 25 any age).
   const militaryCredit = profile.employment.militaryDepositPaid ? (profile.employment.militaryServiceYears || 0) : 0;
-  const effSpecialYears = resolveSpecialYears(profile.employment, Math.max(0, fersYears - militaryCredit), specialYears);
+  const effSpecialYears = resolveSpecialYears(profile.employment, Math.max(0, fersYearsExSick - militaryCredit), specialYears);
 
   const canRetire = effSpecialYears > 0
     ? (effSpecialYears >= 25 || (currentAge >= 50 && effSpecialYears >= 20))
-    : canRetireNow(currentAge, totalYears, profile.personal.birthYear);
+    : canRetireNow(currentAge, totalYearsExSick, profile.personal.birthYear);
 
   const earliestInfo = effSpecialYears > 0
     ? {
-        age: effSpecialYears >= 25 ? Math.min(currentAge, 50) : 50,
-        yearsOfService: totalYears,
+        age: effSpecialYears >= 25 ? currentAge : Math.max(50, currentAge),
+        yearsOfService: totalYearsExSick,
       }
     : calculateEarliestRetirementAge(profile.personal.birthYear, creditablePeriods);
 
@@ -90,8 +90,8 @@ export function determineEligibility(profile: UserProfile): EligibilityInfo {
     earliestRetirementDate,
     fullBenefitsAge,
     fullBenefitsDate,
-    fehbEligible: isFEHBEligible(earliestInfo.age, totalYears, profile.personal.birthYear),
-    totalYearsOfService: totalYears,
+    fehbEligible: isFEHBEligible(earliestInfo.age, totalYearsExSick, profile.personal.birthYear),
+    totalYearsOfService: totalYearsExSick,
     detectedSystem,
   };
 }
@@ -228,8 +228,12 @@ function calculateFERSSupplement(
 
   // Eligible for an immediate full annuity (MRA with 30+ years, or age 60+ with 20+ years), a
   // VERA early-out, or a special-provision retirement. MRA+10/postponed/deferred do NOT qualify.
+  // The 30-year branch requires claiming at/after MRA: separating earlier with 30 years yields
+  // a deferred annuity, which carries no supplement.
   const qualifiesForSupplement =
-    totalYears >= 30 || (totalYears >= 20 && claimPensionAge >= 60) || veraEligible || specialEligible;
+    (totalYears >= 30 && claimPensionAge >= mra) ||
+    (totalYears >= 20 && claimPensionAge >= 60) ||
+    veraEligible || specialEligible;
   if (!qualifiesForSupplement) return 0;
 
   // Payment window ends at 62. Special-provision retirees receive it immediately at retirement;
@@ -305,28 +309,74 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
   // Start from current age to show full picture
   const startAge = currentAge;
 
-  // Calculate base pension (will only apply from claimPensionAge)
+  // Calculate base pension (will only apply from annuityStartAge).
+  // calculateAnnualPension projects active service through the separation date.
   const pensionInfo = calculateAnnualPension(profile);
   const basePension = pensionInfo.annualPension;
 
-  // Pre-compute FERS supplement eligibility data (military buyback included in service)
-  const eligibilityForSupplement = determineEligibility(profile);
-  const { fersYears } = calculateServiceBySystem(
+  // Service the employee will have at separation (projected, military buyback included).
+  // At-retirement decisions — supplement eligibility, VERA, FEHB carry-in, special-provision
+  // thresholds — use the EX-sick-leave totals: sick leave pads the annuity, never eligibility.
+  const projectedCreditablePeriods = projectServicePeriodsToSeparation(
     creditableServicePeriods(profile.employment),
+    new Date(profile.personal.birthYear + leaveServiceAge, 0, 1)
+  );
+  const projectedSvc = calculateServiceBySystem(
+    projectedCreditablePeriods,
     profile.employment.sickLeaveHours || 0
   );
+  const projectedFersYearsExSick = projectedSvc.fersYearsExSick;
+  const projectedTotalYearsExSick = projectedSvc.totalYearsExSick;
+
+  // Pre-compute FERS supplement eligibility data (military buyback included in service)
+  const eligibilityForSupplement = determineEligibility(profile);
   const supplementDetectedSystem = eligibilityForSupplement.detectedSystem;
   // Primary retirement system (treat mixed/auto as FERS for COLA/match/SS purposes)
   const primarySystem: 'FERS' | 'CSRS' = supplementDetectedSystem === 'CSRS' ? 'CSRS' : 'FERS';
 
+  // VERA early-out: eligible at age 50 with 20+ years, or any age with 25+ years.
+  // Service measured at separation, excluding sick leave.
+  const mraForSupplement = calculateMRA(profile.personal.birthYear);
+  const veraEligibleForSupplement = profile.retirement.earlyOutVERA === true &&
+    ((claimPensionAge >= 50 && projectedTotalYearsExSick >= 20) ||
+      projectedTotalYearsExSick >= 25);
+
+  // ── FERS special provisions (LEO / firefighter / ATC / etc.) ──────────────────
+  // Covered FERS years drive the enhanced accrual, immediate COLA, the supplement, and an
+  // earnings-test exemption until MRA. (The accrual itself is applied in calculateAnnualPension.)
+  // Measured at separation, excluding sick leave.
+  const specialYearsFromPeriods = projectedSvc.specialYears;
+  const militaryCreditYears = profile.employment.militaryDepositPaid ? (profile.employment.militaryServiceYears || 0) : 0;
+  const effectiveSpecialYears = resolveSpecialYears(
+    profile.employment, Math.max(0, projectedFersYearsExSick - militaryCreditYears), specialYearsFromPeriods);
+  const primaryIsSpecial = effectiveSpecialYears > 0;
+  const specialRetirementEligible = primaryIsSpecial &&
+    ((claimPensionAge >= 50 && effectiveSpecialYears >= 20) || effectiveSpecialYears >= 25);
+
+  // ── Immediate vs deferred annuity ─────────────────────────────────────────────
+  // The annuity is immediate only if the separation itself qualifies: an immediate
+  // annuity at the separation age (including MRA+10 taken immediately), a VERA
+  // early-out, or a special-provision retirement. Otherwise the annuity is DEFERRED
+  // to age 62 — no pension, supplement, or FEHB until then, and deferred annuitants
+  // permanently forfeit FEHB (unlike postponed MRA+10, which reinstates it).
+  const immediateAnnuityAtSeparation =
+    canRetireNow(leaveServiceAge, projectedTotalYearsExSick, profile.personal.birthYear) ||
+    veraEligibleForSupplement ||
+    specialRetirementEligible;
+  const annuityStartAge = immediateAnnuityAtSeparation
+    ? claimPensionAge
+    : Math.max(claimPensionAge, 62);
+
   // FEHB can only be carried into retirement on an immediate annuity (and after meeting
-  // the 5-year coverage rule). If the user retires without qualifying, FEHB premiums are
-  // not charged — such retirees must budget separate (e.g. ACA) coverage, which is not modeled.
-  const fehbEligibleInRetirement = isFEHBEligible(
-    claimPensionAge,
-    eligibilityForSupplement.totalYearsOfService,
-    profile.personal.birthYear
-  );
+  // the 5-year coverage rule). Deferred annuitants permanently forfeit FEHB. If the user
+  // retires without qualifying, FEHB premiums are not charged — such retirees must budget
+  // separate (e.g. ACA) coverage, which is not modeled.
+  const fehbEligibleInRetirement = immediateAnnuityAtSeparation &&
+    isFEHBEligible(
+      leaveServiceAge,
+      projectedTotalYearsExSick,
+      profile.personal.birthYear
+    );
 
   // Age at which Traditional TSP RMDs begin (SECURE 2.0: 73 or 75 by birth year).
   const rmdAge = rmdStartAge(profile.personal.birthYear);
@@ -349,24 +399,6 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
   const firstYearAnnuityFraction = (retirementMonth && retirementMonth < 12)
     ? Math.max(0, Math.min(1, (12 - retirementMonth) / 12))
     : 1;
-
-  // VERA early-out: eligible at age 50 with 20+ years, or any age with 25+ years.
-  const mraForSupplement = calculateMRA(profile.personal.birthYear);
-  const veraEligibleForSupplement = profile.retirement.earlyOutVERA === true &&
-    ((claimPensionAge >= 50 && eligibilityForSupplement.totalYearsOfService >= 20) ||
-      eligibilityForSupplement.totalYearsOfService >= 25);
-
-  // ── FERS special provisions (LEO / firefighter / ATC / etc.) ──────────────────
-  // Covered FERS years drive the enhanced accrual, immediate COLA, the supplement, and an
-  // earnings-test exemption until MRA. (The accrual itself is applied in calculateAnnualPension.)
-  const { fersYears: fersYearsForSpecial, specialYears: specialYearsFromPeriods } =
-    calculateServiceBySystem(creditableServicePeriods(profile.employment), profile.employment.sickLeaveHours || 0);
-  const militaryCreditYears = profile.employment.militaryDepositPaid ? (profile.employment.militaryServiceYears || 0) : 0;
-  const effectiveSpecialYears = resolveSpecialYears(
-    profile.employment, Math.max(0, fersYearsForSpecial - militaryCreditYears), specialYearsFromPeriods);
-  const primaryIsSpecial = effectiveSpecialYears > 0;
-  const specialRetirementEligible = primaryIsSpecial &&
-    ((claimPensionAge >= 50 && effectiveSpecialYears >= 20) || effectiveSpecialYears >= 25);
 
   // ── One-time separation payouts (paid in the first projection year out of service) ──
   // Lump-sum unused annual leave (paid at the final hourly salary rate) + optional VSIP.
@@ -511,19 +543,21 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
   // ── CoastFIRE pre-computation ──────────────────────────────────────────────
   // Estimate the pension-adjusted FIRE number at the planned retirement age so
   // we can discount it back to compute a CoastFIRE target for each projection year.
-  const yearsUntilRetirement = Math.max(0, claimPensionAge - currentAge);
+  const yearsUntilRetirement = Math.max(0, annuityStartAge - currentAge);
   const inflationFactorToRetirement = Math.pow(1 + expenseInflationRate / 100, yearsUntilRetirement);
   // Expenses at retirement: living expenses plus FEHB (if eligible to carry it), both in
-  // future dollars — consistent with the per-year FIRE expense base.
-  const fehbAtRetirement = isFEHBEligible(claimPensionAge, eligibilityForSupplement.totalYearsOfService, profile.personal.birthYear)
-    ? calculateAnnualFEHBCost(profile.assumptions.fehbCoverageLevel, yearsUntilRetirement, profile.assumptions.healthcareInflation)
+  // future dollars — consistent with the per-year FIRE expense base. FEHB is inflated from
+  // its 2026 base year to the calendar retirement year.
+  const retirementCalendarYear = currentYear + yearsUntilRetirement;
+  const fehbAtRetirement = fehbEligibleInRetirement
+    ? calculateAnnualFEHBCost(profile.assumptions.fehbCoverageLevel, Math.max(0, retirementCalendarYear - FEHB_BASE_YEAR), profile.assumptions.healthcareInflation)
     : 0;
   const expensesAtRetirement = baseLivingExpenses * inflationFactorToRetirement + fehbAtRetirement;
   const userSSEstimateForCoast = profile.employment.socialSecurityEstimate;
   // basePension is derived from today's salary; inflate it to retirement-year dollars (using
   // wage growth ≈ inflation as a proxy) so it is comparable to the inflated expenses above.
   const pensionAtRetirement = basePension * inflationFactorToRetirement;
-  const ssAtRetirement = claimPensionAge >= 67
+  const ssAtRetirement = annuityStartAge >= 67
     ? (userSSEstimateForCoast || (primarySystem === 'CSRS' ? 0 : pensionInfo.high3 * 0.30))
     : 0;
   const guaranteedAtRetirement = pensionAtRetirement + ssAtRetirement;
@@ -546,7 +580,7 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
   for (let age = startAge; age <= endAge; age++) {
     const year = profile.personal.birthYear + age;
     const stillWorking = age < leaveServiceAge;
-    const hasPension = age >= claimPensionAge;
+    const hasPension = age >= annuityStartAge;
 
     // ── TSP: contributions while working, distributions in retirement ─────────
     const returnRate = profile.tsp.returnAssumption;
@@ -571,12 +605,13 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       basePension,
       primarySystem,
       age,
-      claimPensionAge,
+      annuityStartAge,
       profile.assumptions.colaRate,
       primaryIsSpecial // special-provision retirees receive COLAs immediately (not deferred to 62)
     ) : 0;
     // First annuity year is prorated for the separation-month / "first of next month" gap.
-    if (hasPension && age === claimPensionAge) pension *= firstYearAnnuityFraction;
+    // Deferred annuities start cleanly at 62 with no separation-month gap.
+    if (hasPension && age === annuityStartAge && immediateAnnuityAtSeparation) pension *= firstYearAnnuityFraction;
 
     // ── Guardrails: compute effective withdrawal rate ─────────────────────────
     // Record portfolio base at the moment of retirement
@@ -612,12 +647,13 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
 
     // Calculate FERS Supplement (paid between retirement/MRA and age 62 for eligible annuitants).
     // Reduced later by the Social Security earnings test if the retiree has wages over the limit.
+    // Service measured at separation, excluding sick leave.
     let fersSupplement = calculateFERSSupplement(
       pensionInfo.high3,
       age,
-      claimPensionAge,
-      fersYears,
-      eligibilityForSupplement.totalYearsOfService,
+      annuityStartAge,
+      projectedFersYearsExSick,
+      projectedTotalYearsExSick,
       supplementDetectedSystem,
       userSSEstimate,
       veraEligibleForSupplement,
@@ -625,39 +661,42 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       specialRetirementEligible
     );
     // Prorate the supplement's first year for the separation-month gap (same as the annuity).
-    if (fersSupplement > 0 && age === claimPensionAge) fersSupplement *= firstYearAnnuityFraction;
+    if (fersSupplement > 0 && age === annuityStartAge && immediateAnnuityAtSeparation) fersSupplement *= firstYearAnnuityFraction;
 
     // Calculate FEHB cost. FEHB requires the annuity to be in payment, so for a POSTPONED
     // retirement (claim age > leave age) coverage is suspended during the gap and reinstated
     // when the annuity begins. For an immediate retirement, coverage starts at separation.
-    const annuityInPayment = age >= claimPensionAge;
+    // Deferred annuitants never qualify (fehbEligibleInRetirement is false for them).
+    const annuityInPayment = age >= annuityStartAge;
     const fehbSuspendedGap = profile.retirement.postponeRetirement === true && !annuityInPayment;
     const fehbActive = !stillWorking && fehbEligibleInRetirement && !fehbSuspendedGap;
+    // FEHB base costs are stated in FEHB_BASE_YEAR dollars — inflate to the calendar year.
     const fehbCost = fehbActive ? calculateAnnualFEHBCost(
       profile.assumptions.fehbCoverageLevel,
-      Math.max(0, age - leaveServiceAge),
+      Math.max(0, year - FEHB_BASE_YEAR),
       profile.assumptions.healthcareInflation
     ) : 0;
 
     // Medicare Part B premium — added at 65+ for primary and/or spouse.
-    // Standard 2024 premium grows at healthcareInflation rate each year. A worker covered
-    // by active FEHB can delay Part B penalty-free, so we start Part B at the later of age 65
-    // and the age they leave service (Special Enrollment Period). Part B is a separate
-    // out-of-pocket cost on top of FEHB. IRMAA surcharges for high earners are not modeled.
+    // The standard premium is stated in MEDICARE_PART_B_BASE_YEAR dollars and inflated to
+    // the calendar year. A worker covered by active FEHB can delay Part B penalty-free, so
+    // we start Part B at the later of age 65 and the age they leave service (Special
+    // Enrollment Period). Part B is a separate out-of-pocket cost on top of FEHB.
+    // IRMAA surcharges for high earners are modeled separately below.
     let medicarePremium = 0;
     const medicareAnnualBase = MEDICARE_PART_B_MONTHLY_2024 * 12;
+    const medicareInflationFactor = Math.pow(
+      1 + profile.assumptions.healthcareInflation / 100,
+      Math.max(0, year - MEDICARE_PART_B_BASE_YEAR)
+    );
     if (age >= 65 && !stillWorking) {
-      const yearsOnMedicare = age - 65;
-      medicarePremium += medicareAnnualBase *
-        Math.pow(1 + profile.assumptions.healthcareInflation / 100, yearsOnMedicare);
+      medicarePremium += medicareAnnualBase * medicareInflationFactor;
     }
     if (spouse) {
       const currentSpouseAgeThisYear = spouseCurrentAge + (age - currentAge);
       const spouseStillWorkingForMedicare = currentSpouseAgeThisYear < spouseLeaveServiceAge;
       if (currentSpouseAgeThisYear >= 65 && !spouseStillWorkingForMedicare) {
-        const spouseMedicareYears = currentSpouseAgeThisYear - 65;
-        medicarePremium += medicareAnnualBase *
-          Math.pow(1 + profile.assumptions.healthcareInflation / 100, spouseMedicareYears);
+        medicarePremium += medicareAnnualBase * medicareInflationFactor;
       }
     }
 
@@ -758,13 +797,16 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
 
     // FERS Supplement earnings test: reduce the supplement $1 for every $2 of *earned* income
     // (part-time/side-hustle wages) above the annual Social Security limit. Special-provision
-    // retirees are EXEMPT from the earnings test until they reach their MRA.
+    // retirees are EXEMPT from the earnings test until they reach their MRA. The limit is
+    // stated in 2024 dollars and indexed by the inflation assumption like other constants.
     const earningsTestExempt = primaryIsSpecial && age < mraForSupplement;
+    const earningsLimit = SS_ANNUAL_EARNINGS_LIMIT *
+      Math.pow(1 + (profile.assumptions.inflationRate || 0) / 100, Math.max(0, year - 2024));
     let supplementEarningsTestReduction = 0;
-    if (!earningsTestExempt && fersSupplement > 0 && otherIncome > SS_ANNUAL_EARNINGS_LIMIT) {
+    if (!earningsTestExempt && fersSupplement > 0 && otherIncome > earningsLimit) {
       supplementEarningsTestReduction = Math.min(
         fersSupplement,
-        (otherIncome - SS_ANNUAL_EARNINGS_LIMIT) / 2
+        (otherIncome - earningsLimit) / 2
       );
       fersSupplement -= supplementEarningsTestReduction;
     }
@@ -815,7 +857,8 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     let totalExpenses = shouldApplyExpenses ? (inflatedLivingExpenses + fehbCost) : 0;
     totalExpenses += medicarePremium;
 
-    // Calculate college costs for children (tracked separately for visibility)
+    // Calculate college costs for children (tracked separately for visibility).
+    // Entered in today's dollars — inflated to the calendar year at the expense inflation rate.
     let collegeCosts = 0;
     (profile.planning?.children || []).forEach(child => {
       const childAge = year - child.birthYear;
@@ -823,7 +866,8 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       const collegeEnd = collegeStart + (child.collegeYears || 4);
 
       if (childAge >= collegeStart && childAge < collegeEnd) {
-        collegeCosts += child.annualCollegeCost || 0;
+        collegeCosts += (child.annualCollegeCost || 0) *
+          Math.pow(1 + expenseInflationRate / 100, Math.max(0, year - currentYear));
       }
     });
     totalExpenses += collegeCosts;
@@ -846,12 +890,16 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
       }
     });
 
-    // Calculate debt payments and update balances
+    // Calculate debt payments and update balances. The payment never exceeds what is
+    // owed (balance + this year's interest) — no phantom payments after payoff.
     let totalDebtPayments = 0;
     debts.forEach(debt => {
       if (debt.currentBalance > 0) {
         const interestCharge = debt.currentBalance * (debt.interestRate / 100);
-        const payment = debt.minimumPayment + (debt.extraPayment || 0);
+        const payment = Math.min(
+          debt.minimumPayment + (debt.extraPayment || 0),
+          debt.currentBalance + interestCharge
+        );
         totalDebtPayments += payment;
         debt.currentBalance = Math.max(0, debt.currentBalance + interestCharge - payment);
       }
@@ -1122,7 +1170,7 @@ export function generateProjections(profile: UserProfile): ProjectionYear[] {
     const fatFireNumber = Math.max(0, fatTotalExp - guaranteedIncome) / (effectiveWithdrawalRate / 100);
 
     // CoastFIRE: balance needed now so that, with 0 new contributions, it grows to fireTargetAtRetirement
-    const yearsUntilRetirementFromHere = Math.max(0, claimPensionAge - age);
+    const yearsUntilRetirementFromHere = Math.max(0, annuityStartAge - age);
     const coastFIRENumber = yearsUntilRetirementFromHere > 0
       ? fireTargetAtRetirement / Math.pow(1 + returnRate / 100, yearsUntilRetirementFromHere)
       : fireTargetAtRetirement;

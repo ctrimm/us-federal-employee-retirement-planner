@@ -4,6 +4,8 @@ A retirement planning calculator built specifically for US federal employees. FE
 
 **Live app route:** `/ferex`
 
+> **Disclaimer:** FEREX is a planning tool for educational purposes only — not professional financial, tax, or legal advice. Estimates use simplified models and assumptions; verify your benefits with OPM and your agency benefits officer before making retirement decisions.
+
 ---
 
 ## Quick Start
@@ -186,6 +188,7 @@ Guaranteed income includes pension, FERS supplement, and Social Security. Non-li
 - **Taxable accounts** carry a cost basis (entered, or an estimated embedded gain by default) and throw off an annual **dividend/interest tax drag** (default 2% yield, taxed at LTCG rates and reinvested into basis); withdrawals realize the remaining gain.
 - **CSRS survivor** annuity uses the CSRS 2.5%/10% cost formula and a 55% survivor benefit (FERS uses 10% / 50%).
 - **Separation month** prorates the first year's annuity (FERS annuity starts the first of the next month); a December separation is a full first year.
+- **Deferred retirement.** Separating before MRA without immediate-annuity eligibility (e.g. 30+ years at 55) defers the annuity to age 62 — no pension, supplement, or FEHB until then, and FEHB is permanently forfeited (unlike postponed MRA+10, which reinstates it at the claim age).
 - State tax is an optional flat rate on ordinary income + taxable SS + capital gains (excludes the non-taxable SS portion and Roth distributions); it does not model state-specific pension exemptions.
 
 **Known simplifications:**

@@ -3,10 +3,40 @@
  * Determines FERS vs CSRS based on service history
  */
 
-import type { ServicePeriod, RetirementSystem, EmploymentInfo, SpecialProvisionType } from '../types';
+import type { ServicePeriod, RetirementSystem, EmploymentInfo, SpecialProvisionType, UserProfile } from '../types';
 import { STANDARD_WORK_HOURS_PER_YEAR } from '../types';
 
 const FERS_START_DATE = new Date('1984-01-01');
+
+/**
+ * Planned separation date for a profile: Jan 1 of the year they turn leaveServiceAge
+ * (falling back to the intended claim age, then to the current age = no projection).
+ */
+export function separationDateForProfile(profile: UserProfile): Date {
+  const currentYear = new Date().getFullYear();
+  const currentAge = currentYear - profile.personal.birthYear;
+  const sepAge = profile.retirement.leaveServiceAge
+    ?? profile.retirement.intendedRetirementAge
+    ?? currentAge;
+  return new Date(profile.personal.birthYear + sepAge, 0, 1);
+}
+
+/**
+ * Project service periods forward to the planned separation date.
+ * Active open-ended periods (no endDate) are extended to the separation date so the
+ * annuity reflects service the employee will have earned by retirement — never truncated:
+ * the end date used is the later of today and the separation date.
+ */
+export function projectServicePeriodsToSeparation(
+  periods: ServicePeriod[],
+  separationDate: Date
+): ServicePeriod[] {
+  const now = new Date();
+  const end = separationDate > now ? separationDate : now;
+  return periods.map((p) =>
+    p.isActive && !p.endDate ? { ...p, endDate: new Date(end) } : p
+  );
+}
 
 /**
  * Return the creditable service periods including a synthetic period for bought-back
@@ -79,7 +109,12 @@ export function calculateTotalServiceWithSickLeave(
 
 /**
  * Calculate service years by system (for mixed FERS/CSRS careers)
- * Includes sick leave credit if provided
+ * Includes sick leave credit if provided.
+ *
+ * Sick leave converts to service credit for the ANNUITY COMPUTATION ONLY — it never
+ * counts toward retirement eligibility (OPM). The `*ExSick` fields carry the
+ * eligibility-relevant totals; use those for every can-retire / immediate-annuity /
+ * VERA / FEHB-carry-in decision.
  */
 export function calculateServiceBySystem(
   periods: ServicePeriod[],
@@ -90,6 +125,9 @@ export function calculateServiceBySystem(
   specialYears: number;
   totalYears: number;
   sickLeaveCredit: number;
+  fersYearsExSick: number;
+  csrsYearsExSick: number;
+  totalYearsExSick: number;
 } {
   let fersYears = 0;
   let csrsYears = 0;
@@ -112,6 +150,11 @@ export function calculateServiceBySystem(
     }
   }
 
+  // Eligibility-relevant totals (before sick leave is folded in).
+  const fersYearsExSick = fersYears;
+  const csrsYearsExSick = csrsYears;
+  const totalYearsExSick = fersYears + csrsYears;
+
   const sickLeaveCredit = calculateSickLeaveCredit(sickLeaveHours);
 
   // Add sick leave credit proportionally to the dominant system
@@ -131,6 +174,9 @@ export function calculateServiceBySystem(
     specialYears,
     totalYears: fersYears + csrsYears,
     sickLeaveCredit,
+    fersYearsExSick,
+    csrsYearsExSick,
+    totalYearsExSick,
   };
 }
 
@@ -203,24 +249,26 @@ export function calculateEarliestRetirementAge(
   // Calculate total years of service
   const totalYears = calculateTotalService(servicePeriods);
 
-  // Check most favorable condition first: MRA with 30+ years (immediate full annuity)
+  // Check most favorable condition first: MRA with 30+ years (immediate full annuity).
+  // Each branch returns the later of the threshold age and the current age — the
+  // earliest age is "now" once the employee is already past the threshold.
   if (totalYears >= 30) {
-    return { age: Math.min(mra, currentAge), yearsOfService: totalYears };
+    return { age: Math.max(mra, currentAge), yearsOfService: totalYears };
   }
 
   // Age 60 with 20+ years (immediate full annuity)
   if (totalYears >= 20) {
-    return { age: Math.min(60, currentAge), yearsOfService: totalYears };
+    return { age: Math.max(60, currentAge), yearsOfService: totalYears };
   }
 
   // MRA with 10+ years (MRA+10, deferred or reduced annuity)
   if (totalYears >= 10) {
-    return { age: Math.min(mra, currentAge), yearsOfService: totalYears };
+    return { age: Math.max(mra, currentAge), yearsOfService: totalYears };
   }
 
   // Age 62 with 5+ years
   if (totalYears >= 5) {
-    return { age: 62, yearsOfService: totalYears };
+    return { age: Math.max(62, currentAge), yearsOfService: 5 };
   }
 
   // If not yet eligible, calculate when they will be (need 5 years for age-62 retirement)

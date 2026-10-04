@@ -28,11 +28,15 @@ const UNIFORM_LIFETIME_DIVISORS: Record<number, number> = {
 /**
  * Required Minimum Distribution for a Traditional (pre-tax) balance at a given age.
  * Roth TSP has no RMD for the account owner (SECURE 2.0, effective 2024), so this applies
- * to the Traditional balance only. Returns 0 below the table's start age.
+ * to the Traditional balance only. Returns 0 below the start age (73/75 per SECURE 2.0).
  */
-export function requiredMinimumDistribution(traditionalBalance: number, age: number): number {
-  if (traditionalBalance <= 0 || age < 73) return 0;
-  const clamped = Math.min(120, Math.max(73, Math.floor(age)));
+export function requiredMinimumDistribution(
+  traditionalBalance: number,
+  age: number,
+  startAge: number = 73
+): number {
+  if (traditionalBalance <= 0 || age < startAge) return 0;
+  const clamped = Math.min(120, Math.max(startAge, Math.floor(age)));
   const divisor = UNIFORM_LIFETIME_DIVISORS[clamped] ?? 2.0;
   return traditionalBalance / divisor;
 }

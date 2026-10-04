@@ -430,6 +430,7 @@ export const SPECIAL_MANDATORY_RETIREMENT_AGE = { atc: 56, leo_firefighter: 57, 
 export const FERS_SUPPLEMENT_AGE = 62;
 export const MRA_10_ANNUAL_REDUCTION = 0.05; // 5% per year under 62 for MRA+10 retirees
 export const MEDICARE_PART_B_MONTHLY_2024 = 174.70; // Standard Part B premium; grows with healthcareInflation
+export const MEDICARE_PART_B_BASE_YEAR = 2024; // Base year for the premium above — inflate to the calendar year
 // Age-62 Social Security benefit is roughly 70% of the full-retirement-age (67) benefit.
 // Used to convert an entered FRA estimate into an age-62 figure for the FERS supplement.
 export const SS_AGE62_TO_FRA_RATIO = 0.70;
@@ -457,4 +458,5 @@ export const SURVIVOR_ANNUITY_REDUCTION = {
 };
 
 // MRA is calculated dynamically by calculateMRA() in systemDetection.ts
-// Birth years before 1953 → MRA 55, 1953–1964 → MRA 56, 1965+ → MRA 57
+// Birth years 1948–1952 → MRA 55, 1953–1969 → MRA 56, 1970+ → MRA 57
+// (transitional months from the OPM table are simplified to whole years)

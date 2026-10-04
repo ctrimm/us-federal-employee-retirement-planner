@@ -4,6 +4,9 @@
 
 import type { FEHBCoverageLevel } from '../types';
 
+// Base year for the premium estimates below. Callers must inflate to the calendar year.
+export const FEHB_BASE_YEAR = 2026;
+
 // 2026 estimated FEHB premiums (annual, employee portion)
 // These are averages and will vary by specific plan
 const FEHB_BASE_COSTS = {
@@ -15,6 +18,7 @@ const FEHB_BASE_COSTS = {
 /**
  * Calculate annual FEHB cost (employee/annuitant share) for a coverage level,
  * inflated `yearsFromNow` years at the healthcare inflation rate.
+ * `yearsFromNow` is measured from FEHB_BASE_YEAR (2026) — pass calendar years.
  */
 export function calculateAnnualFEHBCost(
   coverageLevel: FEHBCoverageLevel,
